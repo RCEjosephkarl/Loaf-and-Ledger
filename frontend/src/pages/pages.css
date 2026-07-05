@@ -1,0 +1,88 @@
+/* ---- Page grids ---- */
+.dash-grid { grid-template-columns: 1.6fr 1fr; align-items: start; }
+.stat-col { display: flex; flex-direction: column; gap: 20px; }
+.salary-grid { grid-template-columns: 360px 1fr; align-items: start; }
+.ledger-grid { grid-template-columns: 320px 1fr; align-items: start; }
+.budget-grid { grid-template-columns: 300px 1fr; align-items: start; }
+.analytics-cols { grid-template-columns: 1fr 1fr; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+
+/* ---- Stat blocks ---- */
+.stat { padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; }
+.stat__value { font-family: var(--font-display); font-size: 29px; font-weight: 600; line-height: 1.1; }
+.stat__value.fig { font-family: var(--font-mono); }
+.stat__sub { font-size: 12px; }
+
+/* ---- Balance sheet (dashboard hero) ---- */
+.balance__table td { padding: 13px 12px; font-size: 15px; border-bottom: 1px solid var(--rule); }
+.balance__table td.num { font-size: 17px; }
+.balance__table tr:nth-child(even) { background: transparent; }
+.balance__table .total td { font-size: 19px; padding-top: 15px; }
+
+/* ---- Insights ---- */
+.insight-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.insight {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 13px 15px;
+  border: 1px solid var(--rule);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+.insight__dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--muted); }
+.insight--good { border-left-color: var(--good); }
+.insight--good .insight__dot { background: var(--good); }
+.insight--warning { border-left-color: var(--warn); }
+.insight--warning .insight__dot { background: var(--warn); }
+.insight--info { border-left-color: var(--crust); }
+.insight--info .insight__dot { background: var(--crust); }
+.insight__title { font-weight: 600; }
+.insight__detail { font-size: 13px; margin-top: 2px; }
+
+/* ---- Empty / error ---- */
+.empty {
+  padding: 26px;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+.empty--error { color: var(--debit); border-color: color-mix(in srgb, var(--debit) 45%, var(--rule)); }
+
+/* ---- Salary breakdown ---- */
+.breakdown-foot { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+
+/* ---- Budget bars ---- */
+.budget-row__head { display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 500; gap: 10px; }
+.budget-row__foot { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; align-items: center; }
+.bar__track { height: 10px; background: var(--green-bar); border-radius: 999px; overflow: hidden; border: 1px solid var(--rule); }
+.bar__fill { height: 100%; background: var(--green); border-radius: 999px; transition: width 0.35s ease; }
+.bar__fill--over { background: var(--debit); }
+
+/* ---- Bar chart ---- */
+.chart__plot { display: flex; align-items: flex-end; gap: 16px; border-bottom: 2px solid var(--rule-strong); }
+.chart__group { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 5px; height: 100%; }
+.chart__bar { width: 18px; border-radius: 3px 3px 0 0; min-height: 2px; }
+.chart__bar--income { background: var(--green); }
+.chart__bar--expense { background: var(--crust); }
+.chart__axis { display: flex; gap: 16px; margin-top: 7px; }
+.chart__tick { flex: 1; text-align: center; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.chart__legend { display: flex; gap: 18px; margin-top: 14px; }
+.chart__key { font-size: 12px; display: inline-flex; align-items: center; gap: 6px; color: var(--ink-soft); }
+.chart__key::before { content: ""; width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.chart__key--income::before { background: var(--green); }
+.chart__key--expense::before { background: var(--crust); }
+
+/* ---- Responsive ---- */
+@media (max-width: 900px) {
+  .dash-grid,
+  .salary-grid,
+  .ledger-grid,
+  .budget-grid,
+  .analytics-cols {
+    grid-template-columns: 1fr;
+  }
+}

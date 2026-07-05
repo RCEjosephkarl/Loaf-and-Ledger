@@ -1,0 +1,230 @@
+/* ============================================================
+   Loaf & Ledger — "Ledger & Crust" design system
+   Signature: monospace tabular figures, greenbar row striping,
+   and accounting double-rule totals.
+   ============================================================ */
+
+:root {
+  /* Light — ledger paper */
+  --paper: #f1f3ea;          /* ledger paper, faint green */
+  --surface: #fbfcf7;        /* cards */
+  --surface-raised: #ffffff;
+  --ink: #1b211e;            /* green-black text */
+  --ink-soft: #47514a;
+  --muted: #7c8579;
+  --rule: #d0d8c6;           /* hairline rules */
+  --rule-strong: #b7c2a8;
+  --green: #2c5a46;          /* primary / credit / structure */
+  --green-bar: #e7eede;      /* greenbar stripe */
+  --crust: #c25e2a;          /* accent — the "loaf" */
+  --crust-soft: #f0d9c8;
+  --debit: #a23a2e;          /* red ledger ink */
+  --credit: #2c5a46;
+  --good: #2c7a52;
+  --warn: #b06a12;
+
+  --font-display: "Spectral", Georgia, "Times New Roman", serif;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --radius: 4px;
+  --radius-lg: 8px;
+  --shadow: 0 1px 2px rgba(27, 33, 30, 0.06), 0 6px 20px rgba(27, 33, 30, 0.05);
+  --maxw: 1160px;
+}
+
+:root[data-theme="dark"] {
+  /* Dark — pumpernickel */
+  --paper: #171b18;
+  --surface: #1f2521;
+  --surface-raised: #262d28;
+  --ink: #ecefe6;
+  --ink-soft: #b7bfb4;
+  --muted: #8c968a;
+  --rule: #333b34;
+  --rule-strong: #454f46;
+  --green: #6fbf9b;
+  --green-bar: #232b26;
+  --crust: #e0894f;
+  --crust-soft: #3a2c22;
+  --debit: #e07a6b;
+  --credit: #6fbf9b;
+  --good: #74c79a;
+  --warn: #d99a4a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #171b18;
+    --surface: #1f2521;
+    --surface-raised: #262d28;
+    --ink: #ecefe6;
+    --ink-soft: #b7bfb4;
+    --muted: #8c968a;
+    --rule: #333b34;
+    --rule-strong: #454f46;
+    --green: #6fbf9b;
+    --green-bar: #232b26;
+    --crust: #e0894f;
+    --crust-soft: #3a2c22;
+    --debit: #e07a6b;
+    --credit: #6fbf9b;
+    --good: #74c79a;
+    --warn: #d99a4a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 500; margin: 0; letter-spacing: -0.01em; }
+
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; }
+
+/* ---- Money figures: the ledger signature ---- */
+.fig {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.01em;
+}
+.fig--credit { color: var(--credit); }
+.fig--debit { color: var(--debit); }
+
+/* ---- Eyebrow / labels ---- */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* ---- Card ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.card__head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.card__body { padding: 20px; }
+
+/* ---- Ledger table (greenbar) ---- */
+.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ledger th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--rule-strong);
+}
+.ledger td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+}
+.ledger tbody tr:nth-child(even) { background: var(--green-bar); }
+.ledger td.num, .ledger th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.ledger tr.total td {
+  border-top: 2px solid var(--ink);       /* single rule above subtotal */
+  border-bottom: 4px double var(--ink);   /* double rule under grand total */
+  font-weight: 600;
+  background: transparent;
+}
+
+/* ---- Buttons ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--rule-strong);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.05s ease;
+}
+.btn:hover { border-color: var(--green); }
+.btn:active { transform: translateY(1px); }
+.btn--primary { background: var(--green); color: #fbfcf7; border-color: var(--green); }
+.btn--primary:hover { filter: brightness(1.05); }
+.btn--crust { background: var(--crust); color: #fff; border-color: var(--crust); }
+:root[data-theme="dark"] .btn--primary,
+:root[data-theme="dark"] .btn--crust { color: #171b18; }
+
+/* ---- Form controls ---- */
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > label { font-size: 12px; color: var(--ink-soft); font-weight: 500; }
+input, select {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+input.fig { font-family: var(--font-mono); }
+input:focus, select:focus, .btn:focus-visible, a:focus-visible {
+  outline: 2px solid var(--crust);
+  outline-offset: 1px;
+}
+
+/* ---- Pills / badges ---- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--rule-strong);
+  color: var(--ink-soft);
+}
+.pill--credit { color: var(--credit); border-color: color-mix(in srgb, var(--credit) 40%, var(--rule)); }
+.pill--debit { color: var(--debit); border-color: color-mix(in srgb, var(--debit) 40%, var(--rule)); }
+.pill--statutory { color: var(--crust); border-color: color-mix(in srgb, var(--crust) 40%, var(--rule)); }
+
+/* ---- Utility ---- */
+.muted { color: var(--muted); }
+.stack { display: flex; flex-direction: column; }
+.row { display: flex; align-items: center; }
+.grid { display: grid; gap: 20px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
