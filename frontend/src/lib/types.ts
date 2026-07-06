@@ -1,6 +1,7 @@
 export type Region = "PH" | "US" | "AU" | "EU";
 export type Direction = "inbound" | "outbound";
 export type PayPeriod = "monthly" | "annual";
+export type BudgetScope = "month" | "3m" | "ytd" | "all";
 
 export interface RegionInfo {
   region: Region;
@@ -64,7 +65,17 @@ export interface Transaction {
   currency: string;
   region: Region | null;
   occurred_on: string;
+  occurred_time: string | null;
   description: string | null;
+}
+
+export interface TransactionUpdate {
+  category_id?: number;
+  amount?: string;
+  currency?: string;
+  occurred_on?: string;
+  occurred_time?: string;
+  description?: string;
 }
 
 export interface CategoryTotal {
@@ -123,12 +134,67 @@ export interface Budget {
 export interface BudgetStatus {
   category_id: number;
   category_name: string;
-  year: number;
-  month: number;
+  year: number | null;
+  month: number | null;
+  scope: BudgetScope;
+  period_start: string;
+  period_end: string;
   limit_amount: string;
   spent: string;
   remaining: string;
   utilization: string;
   currency: string;
   over_budget: boolean;
+}
+
+export interface FundStatus {
+  scope: BudgetScope;
+  period_start: string;
+  period_end: string;
+  amount: string;
+  currency: string;
+  is_override: boolean;
+}
+
+export interface MonthlyCategorySeries {
+  category_id: number | null;
+  category_name: string;
+  values: string[];
+}
+
+export interface MonthlyByCategoryResponse {
+  currency: string;
+  months: string[];
+  series: MonthlyCategorySeries[];
+}
+
+export interface FxRatePoint {
+  date: string;
+  rates: Record<string, string>;
+}
+
+export interface FxRatesResponse {
+  base: string;
+  quotes: string[];
+  live: boolean;
+  as_of: string | null;
+  series: FxRatePoint[];
+}
+
+export interface RunningBalancePoint {
+  date: string;
+  income: string;
+  expense: string;
+  net: string;
+  balance: string;
+}
+
+export interface RunningBalanceResponse {
+  currency: string;
+  points: RunningBalancePoint[];
+}
+
+export interface TransactionBalancesResponse {
+  currency: string;
+  balances: Record<number, string>;
 }

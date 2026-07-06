@@ -68,7 +68,7 @@ mattered for this brief.
    routers (F1–F6) ▶  salary · ledger · analytics · budgets · export · dashboard · meta              │
    services        ▶  tax engine · currency conversion · analytics/insights · single-user            │
    models          ▶  users · salary_profiles · transactions · categories · budgets · jurisdictions  │
-                     │                                                         · exchange_rates       │
+                     │             · exchange_rates · exchange_rate_history · fund_overrides         │
                      └────────────────────────────────────────────────────────────────────────────── ┘
                                    Alembic migrations · SQLite (dev) / PostgreSQL (prod)
 ```
@@ -78,11 +78,11 @@ mattered for this brief.
 | Feature | Endpoints |
 |---|---|
 | F1 Salary | `POST /salary/calculate`, `…/profiles` CRUD + `…/activate` |
-| F2 Ledger | `/ledger/categories`, `/ledger/transactions` CRUD |
-| F3 Analytics | `/analytics/overview`, `/analytics/monthly` |
-| F4 Budgets | `/budgets` CRUD, `/budgets/status` |
-| F5 Export | `/export/expenses.csv` (streamed) |
-| F6 Dashboard | `/dashboard/summary` (honors global filters) |
+| F2 Ledger | `/ledger/categories`, `/ledger/transactions` CRUD incl. `PATCH …/{id}` (inline edit) |
+| F3 Analytics | `/analytics/overview`, `/analytics/monthly`, `/analytics/monthly-by-category`, `/analytics/running-balance` |
+| F4 Budgets | `/budgets` CRUD, `/budgets/status` (`year`+`month`, or `scope`+`anchor` for month/3m/ytd/all), `/budgets/fund` (GET/POST/DELETE — the period's carry-over "initial fund") |
+| F5 Export | `/export/expenses.csv`, `/export/fx-rates.csv` (both streamed) |
+| F6 Dashboard | `/dashboard/summary` (honors global filters); `/fx/rates` (live FX trend, Frankfurter-backed) |
 
 ---
 
@@ -120,24 +120,30 @@ modelled rules:
 ## 5. Results: what the app does
 
 The six features (F1–F6) are all implemented and wired end to end; see
-[`WALKTHROUGH.md`](./WALKTHROUGH.md) for the user-facing tour. The visual identity is
-deliberately a **household ledger book**: monospace tabular figures in every money slot,
-faint "greenbar" row striping, and the accountant's double rule under a grand total.
+[`WALKTHROUGH.md`](./WALKTHROUGH.md) for the user-facing tour. The visual identity is a
+household ledger book crossed with a bakery: monospace tabular figures in every money slot,
+faint "greenbar" row striping, the accountant's double rule under a grand total — and a
+warm, light-brown "crust" as the primary color throughout, with a small wheat-sprig motif
+on the mark. Green is kept, but demoted to its financial meaning (credit/positive) rather
+than the brand's structural color.
 
 ---
 
 ## 6. Evaluation
 
 - **Unit tests** cover the tax engine against hand-verified figures for all four regions,
-  the annualization path, the net = gross − deductions invariant, and bracket edge cases.
+  the annualization path, the net = gross − deductions invariant, bracket edge cases,
+  budget period-boundary math (month/3m/ytd/all, including year rollover), and the live-FX
+  client (parsing, network-failure fallback, range clamping, cache-widening).
 - **Integration tests** drive the API through FastAPI's `TestClient` on SQLite: salary
-  calculate-vs-persist, category/direction guards, currency-converted dashboards, budget
-  upsert + status, and CSV export.
+  calculate-vs-persist, category/direction guards, currency-converted dashboards, ledger
+  edits, multi-month budget aggregation + currency conversion, the fund-override lifecycle,
+  monthly-by-category aggregation, FX rate ranges, and CSV export.
 - **End-to-end:** the SPA, its dev proxy, and the API were exercised together — reads and
   writes — against the seeded database.
 
 ```bash
-cd backend && uv run pytest      # 23 passing
+cd backend && uv run pytest      # 58 passing
 cd frontend && npm run build     # typecheck + production build
 ```
 
@@ -149,8 +155,11 @@ cd frontend && npm run build     # typecheck + production build
   deliberately out of scope for v1 but the `jurisdictions` model is built to grow.
 - **Tax years** are current-year; the schema already carries a `year` field, so multi-year
   support is a data-only addition.
-- **Exchange rates** are static and manually refreshed — a conscious trade for offline,
-  dependency-free operation. A live-rate adapter is a natural next step.
+- **Exchange rates** now refresh live from Frankfurter (ECB reference rates) on request,
+  caching a daily history and falling back to whatever's cached if the network is
+  unreachable. Fetches are capped at 365 days per request to stay polite to the free
+  upstream API — a background scheduled refresh instead of on-demand fetching is a natural
+  next step.
 - **Auth** is intentionally absent; the optional single app-password seam is unbuilt.
 
 ---

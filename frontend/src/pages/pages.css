@@ -1,5 +1,6 @@
 /* ---- Page grids ---- */
 .dash-grid { grid-template-columns: 1.6fr 1fr; align-items: start; }
+.dash-grid__wide { grid-column: 1 / -1; }
 .stat-col { display: flex; flex-direction: column; gap: 20px; }
 .salary-grid { grid-template-columns: 360px 1fr; align-items: start; }
 .ledger-grid { grid-template-columns: 320px 1fr; align-items: start; }
@@ -16,8 +17,30 @@
 /* ---- Balance sheet (dashboard hero) ---- */
 .balance__table td { padding: 13px 12px; font-size: 15px; border-bottom: 1px solid var(--rule); }
 .balance__table td.num { font-size: 17px; }
-.balance__table tr:nth-child(even) { background: transparent; }
+/* `.ledger.balance__table tbody` (not just `.balance__table`) so this outranks
+   the `.ledger tbody tr:nth-child(even)` greenbar-stripe rule in index.css —
+   otherwise that stripe shows through on the dashboard's balance sheet. */
+.ledger.balance__table tbody tr:nth-child(even) { background: transparent; }
 .balance__table .total td { font-size: 19px; padding-top: 15px; }
+
+/* ---- Highlight card: the one bold card on the Dashboard ---- */
+.card.highlight-card {
+  /* Qualified with `.card` so this reliably outranks `.card`'s own
+     `background` in index.css — both are single-class selectors, so
+     without the extra specificity, whichever stylesheet's import happens
+     to be last in the module graph wins the cascade instead of this rule. */
+  background: linear-gradient(135deg, var(--crust) 0%, color-mix(in srgb, var(--crust) 75%, var(--ink)) 100%);
+  border-color: var(--crust);
+  color: #fff;
+}
+.highlight-card .card__head { border-bottom-color: color-mix(in srgb, #fff 25%, transparent); }
+.highlight-card .card__head h3 { color: #fff; }
+.highlight-card .pill { border-color: color-mix(in srgb, #fff 45%, transparent); color: #fff; }
+.highlight-card .balance__table td { border-bottom-color: color-mix(in srgb, #fff 18%, transparent); color: #fff; }
+.highlight-card .balance__table .total td { font-size: 27px; font-weight: 600; border-top: 2px solid rgba(255, 255, 255, 0.5); border-bottom: 4px double rgba(255, 255, 255, 0.6); }
+.highlight-card .fig--credit { color: color-mix(in srgb, white 55%, var(--good)); }
+.highlight-card .fig--debit { color: color-mix(in srgb, white 60%, #ffb3a3); }
+.highlight-card__note { margin: 14px 0 0; font-size: 13px; color: color-mix(in srgb, #fff 82%, transparent); }
 
 /* ---- Insights ---- */
 .insight-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
@@ -41,6 +64,18 @@
 .insight__title { font-weight: 600; }
 .insight__detail { font-size: 13px; margin-top: 2px; }
 
+/* ---- Ledger: scrollable transaction list ---- */
+.ledger-scroll { max-height: 480px; overflow-y: auto; overflow-x: auto; }
+.ledger-scroll table.ledger thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.ledger-row--editing td { background: var(--green-bar); vertical-align: top; padding-top: 10px; }
+.ledger-row--editing select,
+.ledger-row--editing input { font-size: 13px; padding: 6px 8px; }
+
 /* ---- Empty / error ---- */
 .empty {
   padding: 26px;
@@ -59,22 +94,18 @@
 .budget-row__head { display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 500; gap: 10px; }
 .budget-row__foot { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; align-items: center; }
 .bar__track { height: 10px; background: var(--green-bar); border-radius: 999px; overflow: hidden; border: 1px solid var(--rule); }
-.bar__fill { height: 100%; background: var(--green); border-radius: 999px; transition: width 0.35s ease; }
+.bar__fill { height: 100%; background: var(--good); border-radius: 999px; transition: width 0.35s ease; }
 .bar__fill--over { background: var(--debit); }
 
-/* ---- Bar chart ---- */
-.chart__plot { display: flex; align-items: flex-end; gap: 16px; border-bottom: 2px solid var(--rule-strong); }
-.chart__group { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 5px; height: 100%; }
-.chart__bar { width: 18px; border-radius: 3px 3px 0 0; min-height: 2px; }
-.chart__bar--income { background: var(--green); }
-.chart__bar--expense { background: var(--crust); }
-.chart__axis { display: flex; gap: 16px; margin-top: 7px; }
-.chart__tick { flex: 1; text-align: center; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
-.chart__legend { display: flex; gap: 18px; margin-top: 14px; }
-.chart__key { font-size: 12px; display: inline-flex; align-items: center; gap: 6px; color: var(--ink-soft); }
-.chart__key::before { content: ""; width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-.chart__key--income::before { background: var(--green); }
-.chart__key--expense::before { background: var(--crust); }
+/* ---- Chart.js cards ---- */
+.chartjs-card { position: relative; width: 100%; height: 240px; }
+
+/* ---- FX rate card ---- */
+.fx-latest { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 16px; }
+.fx-latest__item { display: flex; flex-direction: column; gap: 3px; }
+.fx-latest__value { font-size: 15px; }
+.fx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.fx-mini { display: flex; flex-direction: column; gap: 8px; }
 
 /* ---- Responsive ---- */
 @media (max-width: 900px) {

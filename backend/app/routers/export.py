@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import current_user
 from app.models.base import Region, TxDirection
+from app.models.fx import ExchangeRateHistory
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.analytics import category_map
@@ -79,6 +80,47 @@ def export_expenses(
             buffer.truncate(0)
 
     filename = f"expenses_{datetime.utcnow():%Y%m%d}.csv"
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/fx-rates.csv")
+def export_fx_rates(
+    base: str | None = None,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Stream the cached FX rate history as CSV — separate from expenses.csv
+    since it's a currency time series, not a ledger of transactions."""
+    ccy = (base or user.base_currency).upper()
+
+    def generate():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(["date", "base_currency", "quote_currency", "rate"])
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+        # Executed lazily, once this generator is actually iterated during
+        # streaming — matching `_rows()` above. Executing the query eagerly
+        # (before returning the response) reads from a cursor after the
+        # request-scoped session has moved on, which SQLAlchemy rejects.
+        stmt = (
+            select(ExchangeRateHistory)
+            .where(ExchangeRateHistory.base_currency == ccy)
+            .order_by(ExchangeRateHistory.as_of, ExchangeRateHistory.quote_currency)
+        )
+        for r in db.execute(stmt).scalars():
+            rate = f"{Decimal(str(r.rate)):.6f}"
+            writer.writerow([r.as_of.isoformat(), r.base_currency, r.quote_currency, rate])
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    filename = f"fx_rates_{ccy}_{datetime.utcnow():%Y%m%d}.csv"
     return StreamingResponse(
         generate(),
         media_type="text/csv",

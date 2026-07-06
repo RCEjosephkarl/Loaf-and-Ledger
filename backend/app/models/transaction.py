@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, String
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Time
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, Money, Region, TxDirection
@@ -25,5 +25,7 @@ class Transaction(Base):
     region: Mapped[Region | None] = mapped_column(Enum(Region), nullable=True)
 
     occurred_on: Mapped[date] = mapped_column(Date)
+    # Optional time-of-day (HH:MM); NULL for legacy rows entered before this field existed.
+    occurred_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

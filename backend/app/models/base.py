@@ -36,6 +36,15 @@ class TxDirection(str, enum.Enum):
     OUTBOUND = "outbound"
 
 
+class BudgetScope(str, enum.Enum):
+    """Period granularity for budget status/fund views."""
+
+    MONTH = "month"
+    QUARTER = "3m"
+    YTD = "ytd"
+    ALL = "all"
+
+
 # Canonical display currency per region (amounts are stored in native currency).
 REGION_CURRENCY: dict[Region, str] = {
     Region.PH: "PHP",

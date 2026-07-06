@@ -42,9 +42,14 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => handle<T>(r)),
-  del: (path: string) => fetch(`${BASE}${path}`, { method: "DELETE" }).then((r) => handle<void>(r)),
+  del: (path: string, params?: Params) =>
+    fetch(`${BASE}${path}${qs(params)}`, { method: "DELETE" }).then((r) => handle<void>(r)),
 };
 
 export function exportUrl(params?: Params): string {
   return `${BASE}/export/expenses.csv${qs(params)}`;
+}
+
+export function exportFxUrl(params?: Params): string {
+  return `${BASE}/export/fx-rates.csv${qs(params)}`;
 }

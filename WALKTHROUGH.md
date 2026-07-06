@@ -55,10 +55,17 @@ Your choices persist between visits.
 ## The tour
 
 ### Dashboard — "Where the dough goes"
-Your running balance sheet: credits in, debits out, and net cashflow drawn with the
-accountant's double underline. Alongside it: your savings rate, your active salary's net
-pay, and **plain-language notes** — e.g. a warning when spending outruns income, or a flag
-when one category eats most of your budget.
+Your running balance sheet gets the bold "highlight card" treatment — credits in, debits
+out, and net cashflow drawn with the accountant's double underline, on a filled crust-brown
+background so it reads first. Alongside it: your savings rate, your active salary's net
+pay, and **plain-language notes** — e.g. a warning when spending outruns income, a flag
+when one category eats most of your budget, or a nod when your income streams or spending
+are well diversified.
+
+Below that, a currency-rates panel shows each currency's **actual rate** on its own scale
+(not a normalized percentage) — hover any point to see that day's value and its change from
+the day before, both absolute and percent. It follows the global time range like everything
+else, so switching to "YTD" shows a longer FX trend.
 
 ### Salary — "Gross in, net out"
 1. Pick a **region**, enter your **gross** pay, and choose **monthly** or **annual**.
@@ -76,20 +83,39 @@ when one category eats most of your budget.
 1. Choose **Debit (out)** or **Credit (in)**.
 2. Pick a category, enter an amount, optionally set a region (which sets the entry's
    currency), a date, and a note.
-3. **Record entry.** It appears in the list, credits in green, debits in red.
-4. **Export expenses CSV** downloads the debit side for your current filters — with a
+3. **Record entry.** It appears in the list, credits in green, debits in red. The entry
+   list scrolls within its own panel once it gets long, so the page doesn't grow forever.
+4. **Edit** any entry in place — category, amount, currency, date/time, and note are all
+   changeable. Direction (debit/credit) is the one thing you can't flip on an existing
+   entry; delete and re-add it instead.
+5. **Export expenses CSV** downloads the debit side for your current filters — with a
    converted-amount column in your chosen display currency.
 
 ### Budgets — "Lines drawn before you spend"
-1. Choose the **month** and **year**.
-2. Set a **monthly limit** for any expense category.
-3. Each budget shows a fill bar — green while you're under, red when you've crossed it —
-   with amount spent, percent used, and what's left.
+1. Pick a **period** — Month, 3 months, YTD, or All — using the same segmented control as
+   the global time range, but scoped to this page only; it doesn't affect other pages.
+2. The **Initial fund** card (under the Trend tab) shows what you started the period with —
+   defaulted to the prior period's ending balance, carried forward automatically. Edit it if
+   your real starting point differs, or reset it back to the computed default.
+3. Under **By category**, set a **monthly limit** for any expense category (limits are
+   always set per calendar month, regardless of which period you're viewing) and see each
+   one's fill bar — green while you're under, red once you've crossed it — aggregated over
+   however many months your selected period covers, with amount spent, percent used, and
+   what's left.
+4. The KPI row (On track / At risk / Over budget / Projected period-end) and the running
+   balance chart are both "hyperlocalized" to whichever period you've selected, starting
+   from your initial fund.
 
 ### Analytics — "Cross-referenced"
 The numbers from your salary and your ledger, side by side: total income and expense,
-savings rate, and the share of gross lost to tax and contributions. Below, a six-month
-income-vs-expense chart and category-level breakdowns for both sides.
+savings rate, and the share of gross lost to tax and contributions. Below that, three
+hover-to-switch tabs (click one to keep it open):
+- **Overview** — burn rate, and a monthly combo chart (income/expense bars with the net
+  cash flow traced as a line).
+- **Trends** — cumulative cash-flow trend and the change in expense between consecutive
+  transactions.
+- **Categories** — income/expense tables (with a Δ vs. the prior period) and a stacked
+  chart showing how your top expense categories' mix has shifted month to month.
 
 ---
 
@@ -99,5 +125,7 @@ income-vs-expense chart and category-level breakdowns for both sides.
   currency to see everything reconciled either way.
 - **Statutory vs. spending:** deductions computed by the salary engine are kept separate
   from your discretionary categories, so analytics reflects *behavior*, not payroll math.
-- **Refreshing FX:** exchange rates are seeded and static. To update them, edit the
-  `exchange_rates` table (or `FX_USD` in `backend/app/seed.py` and re-seed).
+- **Refreshing FX:** rates refresh live from Frankfurter (ECB reference rates) whenever the
+  Dashboard's FX panel is fetched, and are cached locally for a day at a time — no manual
+  editing needed. If the network is unreachable, the app falls back to whatever was last
+  cached rather than failing.

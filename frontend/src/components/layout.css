@@ -29,6 +29,7 @@
   color: var(--ink-soft);
   border-left: 2px solid transparent;
   font-weight: 500;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .nav__link:hover { background: var(--green-bar); color: var(--ink); }
 .nav__link.active {
@@ -71,9 +72,23 @@
   cursor: pointer;
 }
 .seg:last-child { border-right: none; }
-.seg--on { background: var(--green); color: #fbfcf7; }
-:root[data-theme="dark"] .seg--on { color: #171b18; }
+.seg--on { background: var(--crust); color: #fff; }
+:root[data-theme="dark"] .seg--on { color: #241a12; }
 .theme-toggle { padding: 7px 11px; font-size: 15px; }
+
+/* ---- Hover tabs (in-page sections) ---- */
+.hover-tabs__strip {
+  display: inline-flex;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.hover-tabs__panel { animation: hover-tabs-fade 0.12s ease; }
+@keyframes hover-tabs-fade {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
 
 /* ---- Content ---- */
 .content { padding: 28px; max-width: var(--maxw); margin: 0 auto; width: 100%; }

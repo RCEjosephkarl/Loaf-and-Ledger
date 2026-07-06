@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import analytics, budgets, dashboard, export, ledger, meta, salary
+from app.routers import analytics, budgets, dashboard, export, fx, ledger, meta, salary
 
 settings = get_settings()
 
@@ -27,7 +27,7 @@ def create_app() -> FastAPI:
     )
 
     prefix = settings.api_prefix
-    for module in (meta, salary, ledger, analytics, budgets, export, dashboard):
+    for module in (meta, salary, ledger, analytics, budgets, export, dashboard, fx):
         app.include_router(module.router, prefix=prefix)
 
     @app.get("/health", tags=["meta"])

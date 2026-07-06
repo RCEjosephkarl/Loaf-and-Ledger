@@ -69,6 +69,40 @@ def test_transaction_flow_and_category_direction_guard(client):
     assert bad.status_code == 422
 
 
+def test_update_transaction(client):
+    cats = client.get("/api/v1/ledger/categories", params={"direction": "outbound"}).json()
+    groceries = next(c for c in cats if c["name"] == "Groceries")
+    dining = next(c for c in cats if c["name"] == "Dining")
+
+    created = client.post(
+        "/api/v1/ledger/transactions",
+        json={
+            "direction": "outbound",
+            "category_id": groceries["id"],
+            "amount": "50.00",
+            "currency": "USD",
+            "occurred_on": str(date.today()),
+            "description": "Original",
+        },
+    ).json()
+
+    patched = client.patch(
+        f"/api/v1/ledger/transactions/{created['id']}",
+        json={"category_id": dining["id"], "amount": "75.25", "description": "Updated"},
+    )
+    assert patched.status_code == 200
+    body = patched.json()
+    assert body["category_id"] == dining["id"]
+    assert float(body["amount"]) == 75.25
+    assert body["description"] == "Updated"
+    # Fields not included in the patch are untouched.
+    assert body["currency"] == "USD"
+    assert body["occurred_on"] == str(date.today())
+
+    missing = client.patch("/api/v1/ledger/transactions/999999", json={"amount": "1"})
+    assert missing.status_code == 404
+
+
 def test_dashboard_currency_conversion(seeded_client):
     usd = seeded_client.get("/api/v1/dashboard/summary", params={"currency": "USD"}).json()
     php = seeded_client.get("/api/v1/dashboard/summary", params={"currency": "PHP"}).json()

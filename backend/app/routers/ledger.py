@@ -17,10 +17,12 @@ from app.models.user import User
 from app.schemas import (
     CategoryCreate,
     CategoryOut,
+    TransactionBalancesResponse,
     TransactionCreate,
     TransactionOut,
     TransactionUpdate,
 )
+from app.services import analytics as analytics_svc
 
 router = APIRouter(prefix="/ledger", tags=["ledger"])
 
@@ -96,8 +98,24 @@ def list_transactions(
         stmt = stmt.where(Transaction.region == region)
     if direction is not None:
         stmt = stmt.where(Transaction.direction == direction)
-    stmt = stmt.order_by(Transaction.occurred_on.desc(), Transaction.id.desc()).limit(limit)
+    stmt = stmt.order_by(
+        Transaction.occurred_on.desc(), Transaction.occurred_time.desc(), Transaction.id.desc()
+    ).limit(limit)
     return db.execute(stmt).scalars().all()
+
+
+@router.get("/transactions/balances", response_model=TransactionBalancesResponse)
+def transaction_balances(
+    currency: str | None = None,
+    region: Region | None = None,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Full-history cumulative balance per transaction — feeds the Ledger
+    table's running-balance column."""
+    ccy = (currency or user.base_currency).upper()
+    balances = analytics_svc.running_balance_by_transaction(db, user.id, currency=ccy, region=region)
+    return TransactionBalancesResponse(currency=ccy, balances=balances)
 
 
 @router.post("/transactions", response_model=TransactionOut, status_code=201)
@@ -118,6 +136,7 @@ def create_transaction(
         currency=_resolve_currency(payload.currency, payload.region, user),
         region=payload.region,
         occurred_on=payload.occurred_on,
+        occurred_time=payload.occurred_time,
         description=payload.description,
     )
     db.add(tx)

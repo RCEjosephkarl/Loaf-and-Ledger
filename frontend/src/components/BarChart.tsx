@@ -1,43 +1,71 @@
+import { Chart } from "react-chartjs-2";
+import { useChartPalette } from "@/lib/chartColors";
 import { monthLabel, money } from "@/lib/format";
 import type { MonthlyPoint } from "@/lib/types";
 
-/** Minimal grouped bar chart: income vs expense per month, themed via CSS vars. */
+/** Combo chart: grouped income-vs-expense bars, one group per month, with
+ * the net cash flow traced as an overlaid line (Chart.js mixed dataset). */
 export function BarChart({ series, currency }: { series: MonthlyPoint[]; currency: string }) {
+  const palette = useChartPalette();
   if (!series.length) return <div className="empty">No monthly data yet.</div>;
 
-  const H = 170;
-  const max = Math.max(...series.flatMap((p) => [Number(p.income), Number(p.expense)]), 1);
-  const barH = (v: string) => Math.round((Number(v) / max) * H);
-
   return (
-    <div className="chart">
-      <div className="chart__plot" style={{ height: H }}>
-        {series.map((p) => (
-          <div className="chart__group" key={p.month}>
-            <div
-              className="chart__bar chart__bar--income"
-              style={{ height: barH(p.income) }}
-              title={`Income · ${money(p.income, currency)}`}
-            />
-            <div
-              className="chart__bar chart__bar--expense"
-              style={{ height: barH(p.expense) }}
-              title={`Expense · ${money(p.expense, currency)}`}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="chart__axis">
-        {series.map((p) => (
-          <span className="chart__tick" key={p.month}>
-            {monthLabel(p.month)}
-          </span>
-        ))}
-      </div>
-      <div className="chart__legend">
-        <span className="chart__key chart__key--income">Income</span>
-        <span className="chart__key chart__key--expense">Expense</span>
-      </div>
+    <div className="chartjs-card">
+      <Chart
+        type="bar"
+        data={{
+          labels: series.map((p) => monthLabel(p.month)),
+          datasets: [
+            {
+              type: "bar" as const,
+              label: "Income",
+              data: series.map((p) => Number(p.income)),
+              backgroundColor: palette.green,
+              borderRadius: 3,
+              maxBarThickness: 22,
+            },
+            {
+              type: "bar" as const,
+              label: "Expense",
+              data: series.map((p) => Number(p.expense)),
+              backgroundColor: palette.crust,
+              borderRadius: 3,
+              maxBarThickness: 22,
+            },
+            {
+              type: "line" as const,
+              label: "Net",
+              data: series.map((p) => Number(p.net)),
+              borderColor: palette.ink,
+              backgroundColor: palette.ink,
+              pointRadius: 3,
+              pointHoverRadius: 5,
+              borderWidth: 2,
+              tension: 0.25,
+              order: 0,
+            },
+          ],
+        }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { grid: { display: false }, ticks: { color: palette.muted } },
+            y: {
+              grid: { color: palette.rule },
+              ticks: { color: palette.muted, callback: (v) => money(Number(v), currency) },
+            },
+          },
+          plugins: {
+            legend: { position: "bottom", labels: { color: palette.ink } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${money(Number(ctx.raw), currency)}`,
+              },
+            },
+          },
+        }}
+      />
     </div>
   );
 }

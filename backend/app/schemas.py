@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.base import Region, TxDirection
+from app.models.base import BudgetScope, Region, TxDirection
 from app.models.salary import PayPeriod
 
 # ---------------------------------------------------------------- meta / user
@@ -122,6 +122,7 @@ class TransactionCreate(BaseModel):
     currency: str | None = None  # defaults to region/base currency if omitted
     region: Region | None = None
     occurred_on: date
+    occurred_time: time | None = None
     description: str | None = None
 
 
@@ -130,6 +131,7 @@ class TransactionUpdate(BaseModel):
     amount: Decimal | None = None
     currency: str | None = None
     occurred_on: date | None = None
+    occurred_time: time | None = None
     description: str | None = None
 
 
@@ -142,7 +144,13 @@ class TransactionOut(BaseModel):
     currency: str
     region: Region | None
     occurred_on: date
+    occurred_time: time | None
     description: str | None
+
+
+class TransactionBalancesResponse(BaseModel):
+    currency: str
+    balances: dict[int, Decimal]
 
 
 # ---------------------------------------------------------------- F4 budgets
@@ -169,14 +177,33 @@ class BudgetOut(BaseModel):
 class BudgetStatus(BaseModel):
     category_id: int
     category_name: str
-    year: int
-    month: int
+    year: int | None = None  # populated for scope=month, else None
+    month: int | None = None
+    scope: str = "month"
+    period_start: date
+    period_end: date  # inclusive
     limit_amount: Decimal
     spent: Decimal
     remaining: Decimal
     utilization: Decimal
     currency: str
     over_budget: bool
+
+
+class FundOverrideIn(BaseModel):
+    scope: BudgetScope
+    anchor: date | None = None
+    amount: Decimal
+    currency: str | None = None
+
+
+class FundStatus(BaseModel):
+    scope: BudgetScope
+    period_start: date
+    period_end: date  # inclusive
+    amount: Decimal
+    currency: str
+    is_override: bool
 
 
 # ---------------------------------------------------------------- F3/F6 analytics
@@ -196,6 +223,18 @@ class Insight(BaseModel):
     detail: str
 
 
+class MonthlyCategorySeries(BaseModel):
+    category_id: int | None
+    category_name: str
+    values: list[Decimal]
+
+
+class MonthlyByCategoryResponse(BaseModel):
+    currency: str
+    months: list[str]  # "YYYY-MM", oldest -> newest
+    series: list[MonthlyCategorySeries]
+
+
 class DashboardSummary(BaseModel):
     currency: str
     region: Region | None
@@ -206,3 +245,35 @@ class DashboardSummary(BaseModel):
     savings_rate: Decimal
     top_expense_categories: list[CategoryTotal]
     insights: list[Insight]
+
+
+# ---------------------------------------------------------------- FX rates (live)
+
+
+class FxRatePoint(BaseModel):
+    date: date
+    rates: dict[str, Decimal]
+
+
+class FxRatesResponse(BaseModel):
+    base: str
+    quotes: list[str]
+    live: bool
+    as_of: date | None
+    series: list[FxRatePoint]
+
+
+# ---------------------------------------------------------------- running balance
+
+
+class RunningBalancePoint(BaseModel):
+    date: date
+    income: Decimal
+    expense: Decimal
+    net: Decimal
+    balance: Decimal
+
+
+class RunningBalanceResponse(BaseModel):
+    currency: str
+    points: list[RunningBalancePoint]

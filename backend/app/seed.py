@@ -6,7 +6,7 @@ Safe to run repeatedly — existing rows are left untouched.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -169,53 +169,21 @@ def seed_demo(db: Session) -> None:
 
         today = date.today()
         month_start = today.replace(day=1)
-        demo = [
-            (TxDirection.INBOUND, "Base salary", "4590.00", month_start, "Monthly net salary"),
-            (
-                TxDirection.INBOUND,
-                "Freelance income",
-                "600.00",
-                month_start + timedelta(days=5),
-                "Side project",
-            ),
-            (TxDirection.OUTBOUND, "Housing", "1500.00", month_start + timedelta(days=1), "Rent"),
-            (
-                TxDirection.OUTBOUND,
-                "Groceries",
-                "480.00",
-                month_start + timedelta(days=3),
-                "Supermarket",
-            ),
-            (
-                TxDirection.OUTBOUND,
-                "Dining",
-                "220.00",
-                month_start + timedelta(days=6),
-                "Restaurants",
-            ),
-            (
-                TxDirection.OUTBOUND,
-                "Transport",
-                "160.00",
-                month_start + timedelta(days=7),
-                "Fuel + transit",
-            ),
-            (
-                TxDirection.OUTBOUND,
-                "Subscriptions",
-                "55.00",
-                month_start + timedelta(days=8),
-                "Streaming + apps",
-            ),
-            (
-                TxDirection.OUTBOUND,
-                "Utilities",
-                "180.00",
-                month_start + timedelta(days=9),
-                "Electricity + water",
-            ),
+
+        # A prior month of activity so carry-over "initial fund" and the 3M/YTD/All
+        # budget scopes have real history to show on first run, not just zeros.
+        def _prior_month_start(base: date, months_back: int) -> date:
+            idx = base.year * 12 + (base.month - 1) - months_back
+            return date(idx // 12, idx % 12 + 1, 1)
+
+        prior_month_start = _prior_month_start(month_start, 1)
+        prior_demo = [
+            (TxDirection.INBOUND, "Base salary", "4590.00", prior_month_start, time(9, 0), "Monthly net salary"),
+            (TxDirection.OUTBOUND, "Housing", "1500.00", prior_month_start + timedelta(days=1), time(8, 5), "Rent"),
+            (TxDirection.OUTBOUND, "Groceries", "410.00", prior_month_start + timedelta(days=4), time(11, 5), "Supermarket"),
+            (TxDirection.OUTBOUND, "Dining", "150.00", prior_month_start + timedelta(days=9), time(19, 0), "Restaurants"),
         ]
-        for direction, name, amount, when, desc in demo:
+        for direction, name, amount, when, when_time, desc in prior_demo:
             db.add(
                 Transaction(
                     user_id=user.id,
@@ -225,30 +193,115 @@ def seed_demo(db: Session) -> None:
                     currency="USD",
                     region=Region.US,
                     occurred_on=when,
+                    occurred_time=when_time,
                     description=desc,
                 )
             )
 
-        # A demo budget for the current month.
-        groceries_id = cat("Groceries", TxDirection.OUTBOUND)
-        if not db.execute(
-            select(Budget).where(
-                Budget.user_id == user.id,
-                Budget.category_id == groceries_id,
-                Budget.year == today.year,
-                Budget.month == today.month,
-            )
-        ).scalar_one_or_none():
+        demo = [
+            (
+                TxDirection.INBOUND,
+                "Base salary",
+                "4590.00",
+                month_start,
+                time(9, 0),
+                "Monthly net salary",
+            ),
+            (
+                TxDirection.INBOUND,
+                "Freelance income",
+                "600.00",
+                month_start + timedelta(days=5),
+                time(17, 45),
+                "Side project",
+            ),
+            (
+                TxDirection.OUTBOUND,
+                "Housing",
+                "1500.00",
+                month_start + timedelta(days=1),
+                time(8, 5),
+                "Rent",
+            ),
+            (
+                TxDirection.OUTBOUND,
+                "Groceries",
+                "480.00",
+                month_start + timedelta(days=3),
+                time(11, 20),
+                "Supermarket",
+            ),
+            (
+                TxDirection.OUTBOUND,
+                "Dining",
+                "220.00",
+                month_start + timedelta(days=6),
+                time(19, 30),
+                "Restaurants",
+            ),
+            (
+                TxDirection.OUTBOUND,
+                "Transport",
+                "160.00",
+                month_start + timedelta(days=7),
+                time(7, 50),
+                "Fuel + transit",
+            ),
+            (
+                TxDirection.OUTBOUND,
+                "Subscriptions",
+                "55.00",
+                month_start + timedelta(days=8),
+                time(21, 15),
+                "Streaming + apps",
+            ),
+            (
+                TxDirection.OUTBOUND,
+                "Utilities",
+                "180.00",
+                month_start + timedelta(days=9),
+                time(14, 40),
+                "Electricity + water",
+            ),
+        ]
+        for direction, name, amount, when, when_time, desc in demo:
             db.add(
-                Budget(
+                Transaction(
                     user_id=user.id,
-                    category_id=groceries_id,
-                    year=today.year,
-                    month=today.month,
-                    limit_amount=Decimal("500"),
+                    direction=direction,
+                    category_id=cat(name, direction),
+                    amount=Decimal(amount),
                     currency="USD",
+                    region=Region.US,
+                    occurred_on=when,
+                    occurred_time=when_time,
+                    description=desc,
                 )
             )
+
+        # Demo budgets for the current + 2 prior months, so the 3M/YTD/All
+        # period scopes on the Budgets page have real data on first run.
+        groceries_id = cat("Groceries", TxDirection.OUTBOUND)
+        for months_back, limit in ((0, "500"), (1, "480"), (2, "480")):
+            budget_month = _prior_month_start(month_start, months_back)
+            if not db.execute(
+                select(Budget).where(
+                    Budget.user_id == user.id,
+                    Budget.category_id == groceries_id,
+                    Budget.year == budget_month.year,
+                    Budget.month == budget_month.month,
+                )
+            ).scalar_one_or_none():
+                db.add(
+                    Budget(
+                        user_id=user.id,
+                        category_id=groceries_id,
+                        year=budget_month.year,
+                        month=budget_month.month,
+                        limit_amount=Decimal(limit),
+                        currency="USD",
+                    )
+                )
 
     db.commit()
 

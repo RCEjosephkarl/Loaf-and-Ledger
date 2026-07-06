@@ -1,4 +1,4 @@
-/** Loaf & Ledger mark: a scored loaf sitting on a ledger rule. */
+/** Loaf & Ledger mark: a scored loaf with a wheat sprig, resting on a ledger rule. */
 export function Brand({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -13,8 +13,16 @@ export function Brand({ size = 28 }: { size?: number }) {
         strokeLinecap="round"
         opacity="0.75"
       />
-      <line x1="4" y1="24" x2="28" y2="24" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" />
-      <line x1="4" y1="26.5" x2="28" y2="26.5" stroke="var(--green)" strokeWidth="1" strokeLinecap="round" opacity="0.5" />
+      {/* wheat sprig accent */}
+      <g stroke="var(--warn)" strokeWidth="1.1" strokeLinecap="round" opacity="0.85">
+        <line x1="25" y1="10" x2="27" y2="2" />
+        <line x1="25.3" y1="8.2" x2="22.5" y2="5.3" />
+        <line x1="25.3" y1="8.2" x2="28.2" y2="6.2" />
+        <line x1="25.7" y1="5.6" x2="23.3" y2="3.2" />
+        <line x1="25.7" y1="5.6" x2="28" y2="3.6" />
+      </g>
+      <line x1="4" y1="24" x2="28" y2="24" stroke="var(--ink-soft)" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
+      <line x1="4" y1="26.5" x2="28" y2="26.5" stroke="var(--ink-soft)" strokeWidth="1" strokeLinecap="round" opacity="0.35" />
     </svg>
   );
 }

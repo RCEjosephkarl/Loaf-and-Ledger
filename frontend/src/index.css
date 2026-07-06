@@ -5,18 +5,21 @@
    ============================================================ */
 
 :root {
-  /* Light — ledger paper */
-  --paper: #f1f3ea;          /* ledger paper, faint green */
-  --surface: #fbfcf7;        /* cards */
-  --surface-raised: #ffffff;
-  --ink: #1b211e;            /* green-black text */
-  --ink-soft: #47514a;
-  --muted: #7c8579;
-  --rule: #d0d8c6;           /* hairline rules */
-  --rule-strong: #b7c2a8;
-  --green: #2c5a46;          /* primary / credit / structure */
-  --green-bar: #e7eede;      /* greenbar stripe */
-  --crust: #c25e2a;          /* accent — the "loaf" */
+  /* Light — flour & crust: crust-brown is the primary/structural color,
+     paper and cards lean warm (flour/crumb), green steps back to a
+     secondary role but keeps its credit/financial meaning. */
+  --paper: #f5efe2;          /* warm flour-white */
+  --surface: #fdf9f0;        /* chrome (sidebar, topbar, inputs) */
+  --surface-raised: #fffdf8;
+  --crumb: #faf1e2;          /* card background — bread-crumb interior */
+  --ink: #2a1d14;            /* warm coffee-brown text */
+  --ink-soft: #5c4a3a;
+  --muted: #8a7862;
+  --rule: #e3d5bf;           /* hairline rules */
+  --rule-strong: #cdb691;
+  --green: #2c5a46;          /* secondary / credit */
+  --green-bar: #ece2cd;      /* ledger row stripe, warmed to match the paper */
+  --crust: #c25e2a;          /* primary — the "loaf" */
   --crust-soft: #f0d9c8;
   --debit: #a23a2e;          /* red ledger ink */
   --credit: #2c5a46;
@@ -29,22 +32,24 @@
 
   --radius: 4px;
   --radius-lg: 8px;
-  --shadow: 0 1px 2px rgba(27, 33, 30, 0.06), 0 6px 20px rgba(27, 33, 30, 0.05);
+  --shadow: 0 1px 2px rgba(42, 29, 20, 0.07), 0 6px 20px rgba(42, 29, 20, 0.06);
   --maxw: 1160px;
 }
 
 :root[data-theme="dark"] {
-  /* Dark — pumpernickel */
-  --paper: #171b18;
-  --surface: #1f2521;
-  --surface-raised: #262d28;
-  --ink: #ecefe6;
-  --ink-soft: #b7bfb4;
-  --muted: #8c968a;
-  --rule: #333b34;
-  --rule-strong: #454f46;
+  /* Dark — pumpernickel: same crust-primary role swap, warmed toward
+     dark-rye brown instead of a neutral dark green-grey. */
+  --paper: #1c1712;
+  --surface: #241e17;
+  --surface-raised: #2c2419;
+  --crumb: #251f17;
+  --ink: #f2ead9;
+  --ink-soft: #c9b9a0;
+  --muted: #9c8b72;
+  --rule: #3c3226;
+  --rule-strong: #4f4130;
   --green: #6fbf9b;
-  --green-bar: #232b26;
+  --green-bar: #2a2318;
   --crust: #e0894f;
   --crust-soft: #3a2c22;
   --debit: #e07a6b;
@@ -56,16 +61,17 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #171b18;
-    --surface: #1f2521;
-    --surface-raised: #262d28;
-    --ink: #ecefe6;
-    --ink-soft: #b7bfb4;
-    --muted: #8c968a;
-    --rule: #333b34;
-    --rule-strong: #454f46;
+    --paper: #1c1712;
+    --surface: #241e17;
+    --surface-raised: #2c2419;
+    --crumb: #251f17;
+    --ink: #f2ead9;
+    --ink-soft: #c9b9a0;
+    --muted: #9c8b72;
+    --rule: #3c3226;
+    --rule-strong: #4f4130;
     --green: #6fbf9b;
-    --green-bar: #232b26;
+    --green-bar: #2a2318;
     --crust: #e0894f;
     --crust-soft: #3a2c22;
     --debit: #e07a6b;
@@ -115,7 +121,7 @@ button { font-family: inherit; }
 
 /* ---- Card ---- */
 .card {
-  background: var(--surface);
+  background: var(--crumb);
   border: 1px solid var(--rule);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
@@ -176,13 +182,18 @@ button { font-family: inherit; }
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, transform 0.05s ease;
 }
-.btn:hover { border-color: var(--green); }
+.btn:hover { border-color: var(--crust); }
 .btn:active { transform: translateY(1px); }
-.btn--primary { background: var(--green); color: #fbfcf7; border-color: var(--green); }
+.btn--primary { background: var(--crust); color: #fff; border-color: var(--crust); }
 .btn--primary:hover { filter: brightness(1.05); }
 .btn--crust { background: var(--crust); color: #fff; border-color: var(--crust); }
 :root[data-theme="dark"] .btn--primary,
-:root[data-theme="dark"] .btn--crust { color: #171b18; }
+:root[data-theme="dark"] .btn--crust { color: #241a12; }
+:root[data-theme="dark"] .highlight-card,
+:root[data-theme="dark"] .highlight-card .card__head h3,
+:root[data-theme="dark"] .highlight-card .pill,
+:root[data-theme="dark"] .highlight-card .balance__table td { color: #241a12; }
+:root[data-theme="dark"] .highlight-card__note { color: color-mix(in srgb, #241a12 72%, transparent); }
 
 /* ---- Form controls ---- */
 .field { display: flex; flex-direction: column; gap: 5px; }
