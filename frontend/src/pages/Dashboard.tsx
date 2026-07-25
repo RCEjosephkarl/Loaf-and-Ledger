@@ -1,10 +1,11 @@
-import { useDashboard, useFxRates } from "@/api/queries";
+import { useMemo } from "react";
+import { useDashboard, useFxRates, useRunningBalance } from "@/api/queries";
 import { HighlightCard } from "@/components/HighlightCard";
 import { LineChart } from "@/components/LineChart";
 import { Money } from "@/components/Money";
 import { exportFxUrl } from "@/lib/api";
 import { useChartPalette } from "@/lib/chartColors";
-import { percent, shortDate } from "@/lib/format";
+import { money, percent, shortDate } from "@/lib/format";
 import { timeRangeLabel, useFilters } from "@/store/filters";
 import type { Insight } from "@/lib/types";
 
@@ -93,6 +94,54 @@ function FxRatesCard() {
               );
             })}
           </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function BalanceTrendCard() {
+  const timeRange = useFilters((s) => s.timeRange);
+  const { data, isLoading } = useRunningBalance();
+  const palette = useChartPalette();
+
+  const points = data?.points ?? [];
+  const ccy = data?.currency ?? "USD";
+  const labels = useMemo(() => points.map((p) => shortDate(p.date)), [points]);
+
+  return (
+    <section className="card dash-grid__wide">
+      <div className="card__head">
+        <h3>Balance over time</h3>
+        <span className="pill">{timeRangeLabel(timeRange).toLowerCase()}</span>
+      </div>
+      <div className="card__body">
+        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+          Cumulative net cash flow across the selected range — hover a point for that day's
+          in/out split.
+        </p>
+        {isLoading && <div className="empty">Tallying…</div>}
+        {!isLoading && points.length === 0 && <div className="empty">No entries in this range.</div>}
+        {points.length > 0 && (
+          <LineChart
+            labels={labels}
+            series={[
+              {
+                label: "Balance",
+                color: palette.green,
+                fill: true,
+                data: points.map((p) => Number(p.balance)),
+              },
+            ]}
+            valueFormatter={(v) => money(v, ccy)}
+            height={220}
+            tooltipLabel={({ value, index }) => {
+              const p = points[index];
+              const lines = [`Balance: ${money(value, ccy)}`];
+              if (p) lines.push(`In: ${money(p.income, ccy)}  ·  Out: ${money(p.expense, ccy)}`);
+              return lines;
+            }}
+          />
         )}
       </div>
     </section>
@@ -217,6 +266,7 @@ export function Dashboard() {
             </div>
           </section>
 
+          <BalanceTrendCard />
           <FxRatesCard />
         </div>
       )}

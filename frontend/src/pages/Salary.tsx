@@ -9,7 +9,8 @@ import {
   useSaveProfile,
 } from "@/api/queries";
 import { Money } from "@/components/Money";
-import { percent } from "@/lib/format";
+import { ProfileCompareChart } from "@/components/ProfileCompareChart";
+import { percent, signedPercent } from "@/lib/format";
 import { useFilters } from "@/store/filters";
 import type { Breakdown, PayPeriod, Region } from "@/lib/types";
 
@@ -30,6 +31,7 @@ export function Salary() {
   const [label, setLabel] = useState("My salary");
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
   const [view, setView] = useState<"period" | "annual">("period");
+  const [hoveredProfileId, setHoveredProfileId] = useState<number | null>(null);
 
   // Seed the form from the active profile once it loads.
   useEffect(() => {
@@ -55,6 +57,7 @@ export function Salary() {
   const currency = breakdown?.currency ?? "USD";
   const scale = (annual: string, per: string) => (view === "annual" ? annual : per);
 
+  const activeProfile = useMemo(() => profiles?.find((p) => p.is_active) ?? null, [profiles]);
   const items = useMemo(() => breakdown?.items ?? [], [breakdown]);
   const factor = view === "annual" ? 1 : 12;
   const perItem = (annualAmount: string) =>
@@ -193,39 +196,84 @@ export function Salary() {
                   <th>Region</th>
                   <th className="num">Gross</th>
                   <th className="num">Net / yr</th>
+                  <th className="num">Eff. rate</th>
+                  {profiles.length > 1 && <th className="num">Δ vs active</th>}
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {profiles.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      {p.label} {p.is_active && <span className="pill pill--credit">active</span>}
-                    </td>
-                    <td>{p.region}</td>
-                    <td className="num">
-                      <Money value={p.gross_amount} currency={p.currency} />
-                    </td>
-                    <td className="num">
-                      <Money value={p.net_amount} currency={p.currency} sign="credit" />
-                    </td>
-                    <td className="num">
-                      {!p.is_active && (
-                        <button className="btn" onClick={() => activate.mutate(p.id)}>
-                          Activate
+                {profiles.map((p) => {
+                  const deltaPts =
+                    activeProfile && p.id !== activeProfile.id
+                      ? Number(p.breakdown.effective_rate) - Number(activeProfile.breakdown.effective_rate)
+                      : null;
+                  return (
+                    <tr
+                      key={p.id}
+                      className={hoveredProfileId === p.id ? "profile-row--hover" : ""}
+                      onMouseEnter={() => setHoveredProfileId(p.id)}
+                      onMouseLeave={() => setHoveredProfileId(null)}
+                    >
+                      <td>
+                        {p.label} {p.is_active && <span className="pill pill--credit">active</span>}
+                      </td>
+                      <td>{p.region}</td>
+                      <td className="num">
+                        <Money value={p.gross_amount} currency={p.currency} />
+                      </td>
+                      <td className="num">
+                        <Money value={p.net_amount} currency={p.currency} sign="credit" />
+                      </td>
+                      <td className="num fig">{percent(p.breakdown.effective_rate, 1)}</td>
+                      {profiles.length > 1 && (
+                        <td className="num">
+                          {deltaPts === null ? (
+                            <span className="muted">—</span>
+                          ) : (
+                            <span className={deltaPts > 0 ? "fig fig--debit" : "fig fig--credit"}>
+                              {signedPercent(deltaPts, 1)}
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      <td className="num">
+                        {!p.is_active && (
+                          <button className="btn" onClick={() => activate.mutate(p.id)}>
+                            Activate
+                          </button>
+                        )}{" "}
+                        <button className="btn" onClick={() => remove.mutate(p.id)}>
+                          Delete
                         </button>
-                      )}{" "}
-                      <button className="btn" onClick={() => remove.mutate(p.id)}>
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
         </div>
       </section>
+
+      {profiles && profiles.length > 1 && (
+        <section className="card" style={{ marginTop: 20 }}>
+          <div className="card__head">
+            <h3>Compare profiles</h3>
+            <span className="eyebrow">hover a bar or a row</span>
+          </div>
+          <div className="card__body">
+            <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+              Effective tax-and-contribution rate is the one figure that's fair to compare across
+              regions — gross and net stay in each profile's own currency.
+            </p>
+            <ProfileCompareChart
+              profiles={profiles}
+              hoveredId={hoveredProfileId}
+              onHoverChange={setHoveredProfileId}
+            />
+          </div>
+        </section>
+      )}
     </div>
   );
 }

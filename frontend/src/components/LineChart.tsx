@@ -1,5 +1,6 @@
 import { Line } from "react-chartjs-2";
 import { useChartPalette } from "@/lib/chartColors";
+import { crosshairPlugin } from "@/lib/chartPlugins";
 
 export interface LineSeries {
   label: string;
@@ -29,8 +30,9 @@ export function LineChart({
   valueFormatter?: (v: number) => string;
   height?: number;
   /** Override the tooltip line's text — e.g. to show a value + its delta vs
-   * the previous point. Defaults to `"<series>: <formatted value>"`. */
-  tooltipLabel?: (args: TooltipLabelArgs) => string;
+   * the previous point, or multiple lines (return an array). Defaults to
+   * `"<series>: <formatted value>"`. */
+  tooltipLabel?: (args: TooltipLabelArgs) => string | string[];
 }) {
   const palette = useChartPalette();
   if (!labels.length || !series.length) {
@@ -40,6 +42,7 @@ export function LineChart({
   return (
     <div className="chartjs-card" style={{ height }}>
       <Line
+        plugins={[crosshairPlugin]}
         data={{
           labels,
           datasets: series.map((s) => ({
@@ -49,7 +52,10 @@ export function LineChart({
             backgroundColor: s.fill ? `${s.color}22` : s.color,
             borderDash: s.dashed ? [5, 4] : undefined,
             pointRadius: 0,
-            pointHoverRadius: 4,
+            pointHoverRadius: 5,
+            pointHoverBorderWidth: 2,
+            pointHoverBackgroundColor: palette.surface,
+            pointHoverBorderColor: s.color,
             borderWidth: 2,
             tension: 0.25,
             fill: !!s.fill,
