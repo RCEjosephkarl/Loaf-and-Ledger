@@ -17,6 +17,7 @@ import { useChartPalette } from "@/lib/chartColors";
 import { money, moneyShort, percent, shortDate } from "@/lib/format";
 import { timeRangeLabel, useFilters } from "@/store/filters";
 import type { BudgetStatus } from "@/lib/types";
+import { InfoNote } from "@/components/InfoNote";
 
 function UtilizationBar({ row }: { row: BudgetStatus }) {
   const pct = Math.min(Number(row.utilization), 1.5);
@@ -46,17 +47,21 @@ function FundCard({ scope }: { scope: ReturnType<typeof toBudgetScope> }) {
   return (
     <section className="card">
       <div className="card__head">
-        <h3>Initial fund</h3>
-        <span className="eyebrow">{fund?.is_override ? "you set this" : "carried over"}</span>
+        <h3>
+          Starting balance
+          <InfoNote label="About the starting balance">
+            <p>
+              What you had going into this period. By default it's the cumulative net cash flow
+              the day before it started — override it if your books began mid-stream.
+            </p>
+          </InfoNote>
+        </h3>
+        <span className="eyebrow">{fund?.is_override ? "You set this" : "Carried over"}</span>
       </div>
       <div className="card__body">
         <div className="stat__value">
           {fund ? <Money value={fund.amount} sign="credit" /> : <span className="muted">—</span>}
         </div>
-        <p className="muted card__blurb">
-          What you had going into this period. By default it's the cumulative net cash flow the
-          day before it started — override it if your books began mid-stream.
-        </p>
         <form
           className="form-row"
           onSubmit={(e) => {
@@ -123,18 +128,21 @@ export function Budgets() {
   return (
     <div>
       <div className="page-head">
-        <span className="eyebrow">05 · Budgets</span>
-        <h1>Limits, and how close you are</h1>
-        <p>
-          A limit per expense account, per month. Spend is read from the warehouse over the
-          selected period — the same figures the Ledger and Analytics show, never a second
-          calculation that can disagree.
-        </p>
+        <h1>
+          Budgets
+          <InfoNote label="About budgets" lead="Limits, and how close you are.">
+            <p>
+              A limit per expense account, per month. Spend is read from the warehouse over the
+              selected period — the same figures the Ledger and Analytics show, never a second
+              calculation that can disagree.
+            </p>
+          </InfoNote>
+        </h1>
       </div>
 
       <section className="stat-grid" style={{ marginBottom: 20 }}>
         <div className="card stat">
-          <span className="eyebrow">Budgeted · {timeRangeLabel(timeRange).toLowerCase()}</span>
+          <span className="eyebrow">Budgeted for {timeRangeLabel(timeRange).toLowerCase()}</span>
           <div className="stat__value">
             <Money value={totals.limitSum.toFixed(2)} />
           </div>
@@ -160,8 +168,8 @@ export function Budgets() {
       <div className="grid" style={{ gap: 20 }}>
         <section className="card">
           <div className="card__head">
-            <h3>Against the limits</h3>
-            <span className="pill">{timeRangeLabel(timeRange).toLowerCase()}</span>
+            <h3>How each budget is tracking</h3>
+            <span className="pill">{timeRangeLabel(timeRange)}</span>
           </div>
           <div className="card__body">
             {isLoading && <div className="empty">Adding up…</div>}
@@ -211,8 +219,8 @@ export function Budgets() {
 
           <section className="card">
             <div className="card__head">
-              <h3>Set a limit</h3>
-              <span className="eyebrow">expense accounts only</span>
+              <h3>Add a budget</h3>
+              <span className="eyebrow">Expense accounts only</span>
             </div>
             <div className="card__body">
               <form
@@ -290,7 +298,7 @@ export function Budgets() {
         <section className="card">
           <div className="card__head">
             <h3>Running balance</h3>
-            <span className="eyebrow">{timeRangeLabel(timeRange).toLowerCase()}</span>
+            <span className="eyebrow">{timeRangeLabel(timeRange)}</span>
           </div>
           <div className="card__body">
             {points.length === 0 ? (

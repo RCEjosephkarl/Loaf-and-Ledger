@@ -6,12 +6,12 @@ import { useFilters } from "@/store/filters";
 import "@/components/layout.css";
 
 const NAV = [
-  { to: "/", label: "Dashboard", end: true, hint: "01" },
-  { to: "/salary", label: "Salary", hint: "02" },
-  { to: "/accounts", label: "Accounts", hint: "03" },
-  { to: "/ledger", label: "Ledger", hint: "04" },
-  { to: "/budgets", label: "Budgets", hint: "05" },
-  { to: "/analytics", label: "Analytics", hint: "06" },
+  { to: "/", label: "Dashboard", end: true },
+  { to: "/salary", label: "Salary" },
+  { to: "/accounts", label: "Accounts" },
+  { to: "/ledger", label: "Ledger" },
+  { to: "/budgets", label: "Budgets" },
+  { to: "/analytics", label: "Analytics" },
 ];
 
 function useTheme() {
@@ -32,18 +32,19 @@ export function Layout() {
           <Brand />
           <div className="stack">
             <span className="sidebar__name">Loaf &amp; Ledger</span>
-            <span className="eyebrow">household accounts</span>
+            <span className="eyebrow">Household accounts</span>
           </div>
         </div>
         <nav className="nav">
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className="nav__link">
-              <span className="nav__hint">{n.hint}</span>
-              <span>{n.label}</span>
+              {n.label}
             </NavLink>
           ))}
         </nav>
-        <div className="sidebar__foot eyebrow">v0.1.0 · PHP · local</div>
+        <div className="sidebar__foot eyebrow">
+          Version 0.1.0. Philippine peso, stored on this device.
+        </div>
       </aside>
 
       <div className="main">

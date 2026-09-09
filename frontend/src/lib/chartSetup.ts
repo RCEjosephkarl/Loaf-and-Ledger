@@ -29,7 +29,7 @@ Chart.register(
   Legend,
 );
 
-Chart.defaults.font.family = "'IBM Plex Sans', system-ui, -apple-system, sans-serif";
+Chart.defaults.font.family = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
 Chart.defaults.font.size = 12;
 Chart.defaults.plugins.legend.labels.usePointStyle = true;
 Chart.defaults.plugins.legend.labels.boxHeight = 8;

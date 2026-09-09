@@ -10,8 +10,8 @@
 
 /* ---- Stat blocks ---- */
 .stat { padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; }
-.stat__value { font-family: var(--font-display); font-size: 29px; font-weight: 600; line-height: 1.1; }
-.stat__value.fig { font-family: var(--font-mono); }
+.stat__value { font-family: var(--font-display); font-size: 29px; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; }
+.stat__value.fig { font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.01em; }
 .stat__sub { font-size: 12px; }
 
 /* ---- Balance sheet (dashboard hero) ---- */
@@ -21,7 +21,7 @@
    the `.ledger tbody tr:nth-child(even)` greenbar-stripe rule in index.css —
    otherwise that stripe shows through on the dashboard's balance sheet. */
 .ledger.balance__table tbody tr:nth-child(even) { background: transparent; }
-.balance__table .total td { font-size: 19px; padding-top: 15px; }
+.balance__table .total td { font-size: 19px; padding-top: 15px; font-weight: 500; }
 
 /* ---- Highlight card: the one bold card on the Dashboard ---- */
 .card.highlight-card {
@@ -29,18 +29,24 @@
      `background` in index.css — both are single-class selectors, so
      without the extra specificity, whichever stylesheet's import happens
      to be last in the module graph wins the cascade instead of this rule. */
-  background: linear-gradient(135deg, var(--crust) 0%, color-mix(in srgb, var(--crust) 75%, var(--ink)) 100%);
-  border-color: var(--crust);
-  color: #fff;
+  background: linear-gradient(135deg, var(--accent-fill) 0%, color-mix(in srgb, var(--accent-fill) 78%, var(--ink)) 100%);
+  border-color: var(--accent-fill);
+  color: var(--on-accent-fill);
 }
-.highlight-card .card__head { border-bottom-color: color-mix(in srgb, #fff 25%, transparent); }
-.highlight-card .card__head h3 { color: #fff; }
-.highlight-card .pill { border-color: color-mix(in srgb, #fff 45%, transparent); color: #fff; }
-.highlight-card .balance__table td { border-bottom-color: color-mix(in srgb, #fff 18%, transparent); color: #fff; }
-.highlight-card .balance__table .total td { font-size: 27px; font-weight: 600; border-top: 2px solid rgba(255, 255, 255, 0.5); border-bottom: 4px double rgba(255, 255, 255, 0.6); }
-.highlight-card .fig--credit { color: color-mix(in srgb, white 55%, var(--good)); }
-.highlight-card .fig--debit { color: color-mix(in srgb, white 60%, #ffb3a3); }
-.highlight-card__note { margin: 14px 0 0; font-size: 13px; color: color-mix(in srgb, #fff 82%, transparent); }
+.highlight-card .card__head { border-bottom-color: color-mix(in srgb, var(--on-accent-fill) 25%, transparent); }
+.highlight-card .card__head h3 { color: var(--on-accent-fill); }
+.highlight-card .pill { border-color: color-mix(in srgb, var(--on-accent-fill) 45%, transparent); color: var(--on-accent-fill); }
+.highlight-card .balance__table td { border-bottom-color: color-mix(in srgb, var(--on-accent-fill) 18%, transparent); color: var(--on-accent-fill); }
+.highlight-card .balance__table .total td {
+  font-size: 27px;
+  font-weight: 500;
+  color: var(--on-accent-fill);
+  border-top: 1px solid color-mix(in srgb, var(--on-accent-fill) 45%, transparent);
+  border-bottom: none;
+}
+.highlight-card .fig--credit { color: color-mix(in srgb, var(--on-accent-fill) 62%, var(--good)); }
+.highlight-card .fig--debit { color: color-mix(in srgb, var(--on-accent-fill) 62%, var(--debit)); }
+.highlight-card__note { margin: 14px 0 0; font-size: 13px; color: color-mix(in srgb, var(--on-accent-fill) 82%, transparent); }
 
 /* ---- Insights ---- */
 .insight-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
@@ -59,8 +65,8 @@
 .insight--good .insight__dot { background: var(--good); }
 .insight--warning { border-left-color: var(--warn); }
 .insight--warning .insight__dot { background: var(--warn); }
-.insight--info { border-left-color: var(--crust); }
-.insight--info .insight__dot { background: var(--crust); }
+.insight--info { border-left-color: var(--accent); }
+.insight--info .insight__dot { background: var(--accent); }
 .insight__title { font-weight: 600; }
 .insight__detail { font-size: 13px; margin-top: 2px; }
 
@@ -72,7 +78,7 @@
   background: var(--surface);
   z-index: 1;
 }
-.ledger-row--editing td { background: var(--green-bar); vertical-align: top; padding-top: 10px; }
+.ledger-row--editing td { background: var(--row-tint); vertical-align: top; padding-top: 10px; }
 .ledger-row--editing select,
 .ledger-row--editing input { font-size: 13px; padding: 6px 8px; }
 
@@ -90,25 +96,8 @@
 /* ---- Salary breakdown ---- */
 .breakdown-foot { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
 
-/* ---- Salary profile comparison: hover sync between table row and chart bar ---- */
-.profile-row--hover td { background: color-mix(in srgb, var(--crust) 14%, transparent); }
-
-/* ---- Budget bars ---- */
-.budget-row__head { display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 500; gap: 10px; }
-.budget-row__foot { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; align-items: center; }
-.bar__track { height: 10px; background: var(--green-bar); border-radius: 999px; overflow: hidden; border: 1px solid var(--rule); }
-.bar__fill { height: 100%; background: var(--good); border-radius: 999px; transition: width 0.35s ease; }
-.bar__fill--over { background: var(--debit); }
-
 /* ---- Chart.js cards ---- */
 .chartjs-card { position: relative; width: 100%; height: 240px; }
-
-/* ---- FX rate card ---- */
-.fx-latest { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 16px; }
-.fx-latest__item { display: flex; flex-direction: column; gap: 3px; }
-.fx-latest__value { font-size: 15px; }
-.fx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
-.fx-mini { display: flex; flex-direction: column; gap: 8px; }
 
 /* ---- Responsive ---- */
 @media (max-width: 900px) {
@@ -117,7 +106,7 @@
   .ledger-grid,
   .budget-grid,
   .analytics-cols {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -127,8 +116,6 @@
    ============================================================ */
 
 /* --- shared bits ------------------------------------------------------- */
-
-.card__blurb { margin: 0 0 14px; font-size: 13px; line-height: 1.55; }
 
 .form-row {
   display: flex;
@@ -169,7 +156,7 @@
   text-align: left;
   border-bottom: 1px dotted var(--rule-strong);
 }
-.linkish:hover { border-bottom-color: var(--crust); color: var(--crust); }
+.linkish:hover { border-bottom-color: var(--accent); color: var(--accent); }
 
 .callout {
   display: flex;
@@ -220,7 +207,7 @@
   cursor: pointer;
   text-align: left;
 }
-.disclosure:hover { color: var(--crust); }
+.disclosure:hover { color: var(--accent); }
 .disclosure .eyebrow { margin-left: auto; }
 
 .journal-grid input,
@@ -270,7 +257,7 @@
   display: flex;
   height: 8px;
   border-radius: 4px;
-  background: var(--green-bar);
+  background: var(--row-tint);
   overflow: hidden;
 }
 .util__fill { height: 100%; border-radius: 4px; background: var(--credit); }
@@ -311,14 +298,15 @@
 .act-nav__item:hover { color: var(--ink-soft); }
 .act-nav__item--on {
   color: var(--ink);
-  border-left-color: var(--crust);
+  border-left-color: var(--accent);
   font-weight: 500;
 }
 .act-nav__numeral {
   font-family: var(--font-display);
   font-size: 12px;
-  color: var(--crust);
-  min-width: 16px;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 14px;
 }
 
 .analytics__acts { display: flex; flex-direction: column; gap: 56px; }
@@ -326,7 +314,7 @@
 .act { scroll-margin-top: 88px; }
 .act__head {
   display: flex;
-  gap: 18px;
+  gap: 14px;
   align-items: baseline;
   padding-bottom: 18px;
   margin-bottom: 20px;
@@ -334,17 +322,17 @@
 }
 .act__numeral {
   font-family: var(--font-display);
-  font-size: 40px;
-  line-height: 1;
-  color: var(--crust);
-  opacity: 0.55;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--accent);
 }
 .act__title {
   margin: 0 0 8px;
   font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 /* The lede is the argument; it gets reading-column width and the
    numbers inside it get the display serif so they carry weight. */
@@ -358,7 +346,7 @@
 .lede-fig {
   font-family: var(--font-mono);
   font-size: 0.95em;
-  font-weight: 600;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
@@ -375,10 +363,10 @@
   flex: 1;
   height: 8px;
   border-radius: 4px;
-  background: var(--green-bar);
+  background: var(--row-tint);
   overflow: hidden;
 }
-.ranked__fill { height: 100%; border-radius: 4px; background: var(--crust); }
+.ranked__fill { height: 100%; border-radius: 4px; background: var(--accent); }
 .ranked__fill--statutory { background: var(--muted); }
 .ranked__pct { font-size: 12px; min-width: 34px; text-align: right; }
 
@@ -388,7 +376,7 @@
 .post-payslip { display: flex; flex-direction: column; gap: 10px; }
 
 @media (max-width: 900px) {
-  .analytics__layout { grid-template-columns: 1fr; gap: 20px; }
+  .analytics__layout { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .act-nav {
     position: static;
     flex-direction: row;
@@ -398,7 +386,7 @@
     padding-bottom: 8px;
   }
   .act-nav__item { border-left: 0; border-bottom: 2px solid transparent; }
-  .act-nav__item--on { border-left: 0; border-bottom-color: var(--crust); }
+  .act-nav__item--on { border-left: 0; border-bottom-color: var(--accent); }
   .ranked__barcol { display: none; }
   .col-util { width: auto; }
 }

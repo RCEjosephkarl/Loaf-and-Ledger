@@ -1,86 +1,62 @@
 /* ============================================================
-   Loaf & Ledger — "Ledger & Crust" design system
-   Signature: monospace tabular figures, greenbar row striping,
-   and accounting double-rule totals.
+   Loaf & Ledger — "Blue Ink" design system
+   Ledgers were kept in blue-black ink on cool paper; that is the
+   whole palette. Numbers stay monospaced so columns line up,
+   everything else is one soft sans in sentence case.
    ============================================================ */
 
 :root {
-  /* Light — flour & crust: crust-brown is the primary/structural color,
-     paper and cards lean warm (flour/crumb), green steps back to a
-     secondary role but keeps its credit/financial meaning. */
-  --paper: #f5efe2;          /* warm flour-white */
-  --surface: #fdf9f0;        /* chrome (sidebar, topbar, inputs) */
-  --surface-raised: #fffdf8;
-  --crumb: #faf1e2;          /* card background — bread-crumb interior */
-  --ink: #2a1d14;            /* warm coffee-brown text */
-  --ink-soft: #5c4a3a;
-  --muted: #8a7862;
-  --rule: #e3d5bf;           /* hairline rules */
-  --rule-strong: #cdb691;
-  --green: #2c5a46;          /* secondary / credit */
-  --green-bar: #ece2cd;      /* ledger row stripe, warmed to match the paper */
-  --crust: #c25e2a;          /* primary — the "loaf" */
-  --crust-soft: #f0d9c8;
-  --debit: #a23a2e;          /* red ledger ink */
-  --credit: #2c5a46;
-  --good: #2c7a52;
-  --warn: #b06a12;
+  color-scheme: light dark;
 
-  --font-display: "Spectral", Georgia, "Times New Roman", serif;
-  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  /* Surfaces — cool paper by day, night ink after dark. */
+  --paper: light-dark(#eef2f8, #0f1621);
+  --surface: light-dark(#f7f9fc, #151d2a);   /* chrome: sidebar, topbar, inputs */
+  --surface-raised: light-dark(#ffffff, #1c2634);
+  --card-bg: light-dark(#ffffff, #151d2a);
+  --row-tint: light-dark(#eff4fa, #18202d);  /* ledger row striping */
 
-  --radius: 4px;
-  --radius-lg: 8px;
-  --shadow: 0 1px 2px rgba(42, 29, 20, 0.07), 0 6px 20px rgba(42, 29, 20, 0.06);
+  /* Ink */
+  --ink: light-dark(#16233a, #e6ecf6);
+  --ink-soft: light-dark(#405270, #b0bed4);
+  --muted: light-dark(#7c8ba5, #7e8ea6);
+  --rule: light-dark(#dde5f0, #253145);
+  --rule-strong: light-dark(#c2cfe2, #38465c);
+
+  /* Accent, and the text color that sits on top of it. --on-accent has to
+     flip with the theme: the accent lightens in the dark, so white text on
+     it would wash out. Every accent-filled surface reads this token. */
+  --accent: light-dark(#2a5fa8, #7aa9ee);
+  --on-accent: light-dark(#ffffff, #0f1621);
+
+  /* A large filled panel needs a *dimmer* blue than a button does: at card
+     size the dark-mode accent is the brightest thing on the screen, which is
+     the opposite of what dark mode is for. Small accents keep --accent. */
+  --accent-fill: light-dark(#2a5fa8, #21395e);
+  --on-accent-fill: light-dark(#ffffff, #dce7f7);
+
+  /* Money colors. Red and green survive the blue rewrite because debit and
+     credit are the one place where hue carries meaning rather than mood. */
+  --debit: light-dark(#b1443a, #e5837a);
+  --credit: light-dark(#1f7a5a, #5cc79c);
+  --good: light-dark(#1f7a5a, #5cc79c);
+  --warn: light-dark(#a4691a, #d8a04e);
+
+  --font-display: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --radius: 9px;
+  --radius-lg: 14px;
+  --shadow:
+    0 1px 2px light-dark(rgba(22, 35, 58, 0.06), rgba(0, 0, 0, 0.35)),
+    0 8px 24px light-dark(rgba(22, 35, 58, 0.06), rgba(0, 0, 0, 0.28));
   --maxw: 1160px;
 }
 
-:root[data-theme="dark"] {
-  /* Dark — pumpernickel: same crust-primary role swap, warmed toward
-     dark-rye brown instead of a neutral dark green-grey. */
-  --paper: #1c1712;
-  --surface: #241e17;
-  --surface-raised: #2c2419;
-  --crumb: #251f17;
-  --ink: #f2ead9;
-  --ink-soft: #c9b9a0;
-  --muted: #9c8b72;
-  --rule: #3c3226;
-  --rule-strong: #4f4130;
-  --green: #6fbf9b;
-  --green-bar: #2a2318;
-  --crust: #e0894f;
-  --crust-soft: #3a2c22;
-  --debit: #e07a6b;
-  --credit: #6fbf9b;
-  --good: #74c79a;
-  --warn: #d99a4a;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #1c1712;
-    --surface: #241e17;
-    --surface-raised: #2c2419;
-    --crumb: #251f17;
-    --ink: #f2ead9;
-    --ink-soft: #c9b9a0;
-    --muted: #9c8b72;
-    --rule: #3c3226;
-    --rule-strong: #4f4130;
-    --green: #6fbf9b;
-    --green-bar: #2a2318;
-    --crust: #e0894f;
-    --crust-soft: #3a2c22;
-    --debit: #e07a6b;
-    --credit: #6fbf9b;
-    --good: #74c79a;
-    --warn: #d99a4a;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
-  }
-}
+/* An explicit choice pins color-scheme, which is what makes every
+   light-dark() above stop following the OS and follow the toggle instead. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 
@@ -91,52 +67,61 @@ body {
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
-h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 500; margin: 0; letter-spacing: -0.01em; }
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.015em;
+}
 
 a { color: inherit; text-decoration: none; }
 button { font-family: inherit; }
 
-/* ---- Money figures: the ledger signature ---- */
+/* ---- Money figures: the one place monospace earns its keep ---- */
 .fig {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
-  letter-spacing: -0.01em;
 }
 .fig--credit { color: var(--credit); }
 .fig--debit { color: var(--debit); }
 
-/* ---- Eyebrow / labels ---- */
+/* ---- Small labels ----
+   Sentence case, in the body sans. These sit above nearly every figure and
+   field in the app, so shouting them in tracked-out caps made the whole
+   surface read as louder than the numbers it was labelling. */
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
   color: var(--muted);
   font-weight: 500;
+  letter-spacing: 0;
 }
 
 /* ---- Card ---- */
 .card {
-  background: var(--crumb);
+  min-width: 0; /* let a card shrink so a wide table scrolls, not the page */
+  background: var(--card-bg);
   border: 1px solid var(--rule);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
 }
 .card__head {
+  position: relative; /* containing block for an InfoNote panel in the title */
   padding: 16px 20px;
   border-bottom: 1px solid var(--rule);
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px 12px;
 }
-.card__body { padding: 20px; }
+.card__body { padding: 20px; overflow-x: auto; }
 
-/* ---- Ledger table (greenbar) ---- */
+/* ---- Ledger table ---- */
 .ledger {
   width: 100%;
   border-collapse: collapse;
@@ -144,26 +129,27 @@ button { font-family: inherit; }
 }
 .ledger th {
   text-align: left;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
   color: var(--muted);
   font-weight: 500;
+  letter-spacing: 0;
   padding: 8px 12px;
-  border-bottom: 2px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
 }
 .ledger td {
   padding: 9px 12px;
   border-bottom: 1px solid var(--rule);
   vertical-align: middle;
 }
-.ledger tbody tr:nth-child(even) { background: var(--green-bar); }
-.ledger td.num, .ledger th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.ledger tbody tr:nth-child(even) { background: var(--row-tint); }
+.ledger td.num, .ledger th.num { text-align: right; }
+.ledger td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .ledger tr.total td {
-  border-top: 2px solid var(--ink);       /* single rule above subtotal */
-  border-bottom: 4px double var(--ink);   /* double rule under grand total */
-  font-weight: 600;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: none;
+  font-weight: 500;
+  color: var(--ink);
   background: transparent;
 }
 
@@ -182,18 +168,14 @@ button { font-family: inherit; }
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, transform 0.05s ease;
 }
-.btn:hover { border-color: var(--crust); }
+.btn:hover { border-color: var(--accent); }
 .btn:active { transform: translateY(1px); }
-.btn--primary { background: var(--crust); color: #fff; border-color: var(--crust); }
+.btn--primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
 .btn--primary:hover { filter: brightness(1.05); }
-.btn--crust { background: var(--crust); color: #fff; border-color: var(--crust); }
-:root[data-theme="dark"] .btn--primary,
-:root[data-theme="dark"] .btn--crust { color: #241a12; }
-:root[data-theme="dark"] .highlight-card,
-:root[data-theme="dark"] .highlight-card .card__head h3,
-:root[data-theme="dark"] .highlight-card .pill,
-:root[data-theme="dark"] .highlight-card .balance__table td { color: #241a12; }
-:root[data-theme="dark"] .highlight-card__note { color: color-mix(in srgb, #241a12 72%, transparent); }
 
 /* ---- Form controls ---- */
 .field { display: flex; flex-direction: column; gap: 5px; }
@@ -208,8 +190,9 @@ input, select {
   color: var(--ink);
 }
 input.fig { font-family: var(--font-mono); }
-input:focus, select:focus, .btn:focus-visible, a:focus-visible {
-  outline: 2px solid var(--crust);
+input:focus, select:focus, .btn:focus-visible, a:focus-visible,
+.infonote__btn:focus-visible, .linkish:focus-visible, .disclosure:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
@@ -218,17 +201,79 @@ input:focus, select:focus, .btn:focus-visible, a:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  padding: 2px 8px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  padding: 2px 9px;
   border-radius: 999px;
   border: 1px solid var(--rule-strong);
   color: var(--ink-soft);
 }
 .pill--credit { color: var(--credit); border-color: color-mix(in srgb, var(--credit) 40%, var(--rule)); }
 .pill--debit { color: var(--debit); border-color: color-mix(in srgb, var(--debit) 40%, var(--rule)); }
-.pill--statutory { color: var(--crust); border-color: color-mix(in srgb, var(--crust) 40%, var(--rule)); }
+.pill--statutory { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--rule)); }
+
+/* ---- Info note ----
+   The narrative behind a heading, one hover away. Every page and most cards
+   used to open with a paragraph explaining themselves; the explanations are
+   worth keeping, but not worth the top third of every screen. */
+.infonote { position: static; display: inline-block; }
+.infonote__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  margin-left: 8px;
+  vertical-align: 3px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  font-style: italic;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.infonote__btn:hover,
+.infonote__btn[aria-expanded="true"] {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.infonote__panel {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: min(46ch, 100%);
+  padding: 14px 16px;
+  background: var(--surface-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1.6;
+  letter-spacing: normal;
+  color: var(--ink-soft);
+  text-align: left;
+  white-space: normal;
+}
+.infonote__lead {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.infonote__panel p { margin: 0; }
 
 /* ---- Utility ---- */
 .muted { color: var(--muted); }

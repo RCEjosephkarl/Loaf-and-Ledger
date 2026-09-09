@@ -4,7 +4,7 @@ export function Brand({ size = 28 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
       <path
         d="M5 17c0-4.4 4.9-7 11-7s11 2.6 11 7v1.5a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 18.5V17Z"
-        fill="var(--crust)"
+        fill="var(--accent)"
       />
       <path
         d="M11 11.5c0 2-1 3.2-1 5M16 10.6c0 2.2-1 3.4-1 5.4M21 11.5c0 2-1 3.2-1 5"
@@ -14,7 +14,7 @@ export function Brand({ size = 28 }: { size?: number }) {
         opacity="0.75"
       />
       {/* wheat sprig accent */}
-      <g stroke="var(--warn)" strokeWidth="1.1" strokeLinecap="round" opacity="0.85">
+      <g stroke="color-mix(in srgb, var(--accent) 55%, var(--muted))" strokeWidth="1.1" strokeLinecap="round" opacity="0.9">
         <line x1="25" y1="10" x2="27" y2="2" />
         <line x1="25.3" y1="8.2" x2="22.5" y2="5.3" />
         <line x1="25.3" y1="8.2" x2="28.2" y2="6.2" />

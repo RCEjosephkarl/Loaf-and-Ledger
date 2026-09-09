@@ -19,6 +19,7 @@ import { useChartPalette } from "@/lib/chartColors";
 import { money, moneyShort, percent, shortDate, signedPercent } from "@/lib/format";
 import { rangeBounds, timeRangeLabel, useFilters } from "@/store/filters";
 import type { AccountTotal } from "@/lib/types";
+import { InfoNote } from "@/components/InfoNote";
 
 /* ============================================================
    The Analytics page is a four-act argument, not a wall of charts.
@@ -28,13 +29,13 @@ import type { AccountTotal } from "@/lib/types";
    ============================================================ */
 
 const ACTS = [
-  { id: "earned", numeral: "I", title: "What came in" },
-  { id: "spent", numeral: "II", title: "Where it went" },
-  { id: "left", numeral: "III", title: "What's left" },
-  { id: "means", numeral: "IV", title: "What it means" },
+  { id: "earned", numeral: "1", title: "What came in" },
+  { id: "spent", numeral: "2", title: "Where it went" },
+  { id: "left", numeral: "3", title: "What's left" },
+  { id: "means", numeral: "4", title: "What it means" },
 ] as const;
 
-/** A number set in the display serif, inline in a sentence. */
+/** A number set in the mono face, inline in a sentence. */
 function Fig({ children, tone }: { children: React.ReactNode; tone?: "credit" | "debit" }) {
   return <strong className={`lede-fig ${tone ? `lede-fig--${tone}` : ""}`}>{children}</strong>;
 }
@@ -106,7 +107,7 @@ function RankedBars({
           <th>Account</th>
           <th className="ranked__barcol">Share</th>
           <th className="num">Amount</th>
-          {deltas && <th className="num">Δ vs prior</th>}
+          {deltas && <th className="num">Change</th>}
         </tr>
       </thead>
       <tbody>
@@ -286,13 +287,16 @@ export function Analytics() {
   return (
     <div className="analytics" ref={rootRef}>
       <div className="page-head">
-        <span className="eyebrow">06 · Analytics</span>
-        <h1>The story your money tells</h1>
-        <p>
-          Four questions, in the order they matter: what came in, where it went, what's left, and
-          what that means. Every figure below is read from the analytics warehouse — the same
-          numbers the ledger holds, aggregated for reading rather than writing.
-        </p>
+        <h1>
+          Analytics
+          <InfoNote label="About analytics" lead="The story your money tells.">
+            <p>
+              Four questions, in the order they matter: what came in, where it went, what's left,
+              and what that means. Every figure below is read from the analytics warehouse — the
+              same numbers the ledger holds, aggregated for reading rather than writing.
+            </p>
+          </InfoNote>
+        </h1>
       </div>
 
       <StaleBanner />
@@ -307,7 +311,7 @@ export function Analytics() {
             {/* ---------------------------------------------- ACT I */}
             <Act
               id="earned"
-              numeral="I"
+              numeral={ACTS[0].numeral}
               title="What came in"
               lede={
                 earnings && Number(earnings.gross) > 0 ? (
@@ -331,25 +335,29 @@ export function Analytics() {
               <div className="grid analytics-cols">
                 <section className="card">
                   <div className="card__head">
-                    <h3>Gross to net</h3>
+                    <h3>
+                      From gross to take-home
+                      <InfoNote label="About this chart">
+                        <p>
+                          Each bar hangs from where the last one ended, so you can watch every
+                          withholding take its bite rather than reading five numbers and doing
+                          the subtraction yourself.
+                        </p>
+                      </InfoNote>
+                    </h3>
                     <span className="eyebrow">
-                      {earnings?.pay_period === "annual" ? "per year" : "per month"}
+                      {earnings?.pay_period === "annual" ? "Per year" : "Per month"}
                     </span>
                   </div>
                   <div className="card__body">
-                    <p className="muted card__blurb">
-                      Each bar hangs from where the last one ended, so you can watch every
-                      withholding take its bite rather than reading five numbers and doing the
-                      subtraction yourself.
-                    </p>
                     <WaterfallChart steps={waterfall} />
                   </div>
                 </section>
 
                 <section className="card">
                   <div className="card__head">
-                    <h3>Every source of income</h3>
-                    <span className="eyebrow">{timeRangeLabel(timeRange).toLowerCase()}</span>
+                    <h3>Where the money came from</h3>
+                    <span className="eyebrow">{timeRangeLabel(timeRange)}</span>
                   </div>
                   <div className="card__body">
                     {!incomeRows.length ? (
@@ -389,7 +397,7 @@ export function Analytics() {
             {/* --------------------------------------------- ACT II */}
             <Act
               id="spent"
-              numeral="II"
+              numeral={ACTS[1].numeral}
               title="Where it went"
               lede={
                 topExpense ? (
@@ -422,7 +430,7 @@ export function Analytics() {
                   <div className="card__head">
                     <h3>Expense by account</h3>
                     <span className="eyebrow">
-                      {timeRange !== "all" ? "Δ compares the prior period of equal length" : "all time"}
+                      {timeRange !== "all" ? "Compared with the previous period of equal length" : "All time"}
                     </span>
                   </div>
                   <div className="card__body">
@@ -436,14 +444,19 @@ export function Analytics() {
 
                 <section className="card">
                   <div className="card__head">
-                    <h3>The mix, month over month</h3>
-                    <span className="eyebrow">stacked by account</span>
+                    <h3>
+                      Spending mix by month
+                      <InfoNote label="About this chart">
+                        <p>
+                          The top eight accounts by spend keep their own color; the rest fold into
+                          "Other". Colors follow the account, so filtering never repaints the
+                          survivors.
+                        </p>
+                      </InfoNote>
+                    </h3>
+                    <span className="eyebrow">Stacked by account</span>
                   </div>
                   <div className="card__body">
-                    <p className="muted card__blurb">
-                      The top eight accounts by spend keep their own color; the rest fold into
-                      "Other". Colors follow the account, so filtering never repaints the survivors.
-                    </p>
                     <StackedBarChart months={mix?.months ?? []} series={mix?.series ?? []} />
                   </div>
                 </section>
@@ -453,7 +466,7 @@ export function Analytics() {
             {/* -------------------------------------------- ACT III */}
             <Act
               id="left"
-              numeral="III"
+              numeral={ACTS[2].numeral}
               title="What's left"
               lede={
                 <>
@@ -483,8 +496,8 @@ export function Analytics() {
               <div className="grid analytics-cols">
                 <section className="card">
                   <div className="card__head">
-                    <h3>Cash flow</h3>
-                    <span className="eyebrow">cumulative</span>
+                    <h3>Cash over time</h3>
+                    <span className="eyebrow">Running total</span>
                   </div>
                   <div className="card__body">
                     {points.length === 0 ? (
@@ -515,8 +528,8 @@ export function Analytics() {
 
                 <section className="card">
                   <div className="card__head">
-                    <h3>Burn rate</h3>
-                    <span className="eyebrow">average outgoings</span>
+                    <h3>How fast you're spending</h3>
+                    <span className="eyebrow">Average outgoings</span>
                   </div>
                   <div className="card__body">
                     {!burn ? (
@@ -559,7 +572,7 @@ export function Analytics() {
             {/* --------------------------------------------- ACT IV */}
             <Act
               id="means"
-              numeral="IV"
+              numeral={ACTS[3].numeral}
               title="What it means"
               lede={
                 <>
@@ -573,8 +586,7 @@ export function Analytics() {
               <div className="grid" style={{ gap: 20 }}>
                 <section className="card">
                   <div className="card__head">
-                    <h3>Month by month</h3>
-                    <span className="eyebrow">income · expense · net</span>
+                    <h3>Income and expenses by month</h3>
                   </div>
                   <div className="card__body">
                     <div style={{ height: 280 }}>
@@ -585,8 +597,8 @@ export function Analytics() {
 
                 <section className="card">
                   <div className="card__head">
-                    <h3>The figures behind the story</h3>
-                    <span className="eyebrow">{timeRangeLabel(timeRange).toLowerCase()}</span>
+                    <h3>The numbers behind this</h3>
+                    <span className="eyebrow">{timeRangeLabel(timeRange)}</span>
                   </div>
                   <div className="card__body">
                     <table className="ledger">
@@ -605,8 +617,8 @@ export function Analytics() {
                         </tr>
                         <tr>
                           <td>
-                            Moved between own accounts
-                            <span className="muted"> · not spending</span>
+                            Moved between your own accounts
+                            <span className="muted"> (not spending)</span>
                           </td>
                           <td className="num">
                             <Money value={overview.transfer_volume} />
@@ -615,14 +627,14 @@ export function Analytics() {
                         <tr>
                           <td>
                             Statutory withholdings
-                            <span className="muted"> · never discretionary</span>
+                            <span className="muted"> (never discretionary)</span>
                           </td>
                           <td className="num">
                             <Money value={statutoryTotal.toFixed(2)} sign="debit" />
                           </td>
                         </tr>
                         <tr>
-                          <td>Salary · net per period</td>
+                          <td>Salary, net per period</td>
                           <td className="num">
                             {overview.salary_net_period ? (
                               <Money value={overview.salary_net_period} sign="credit" />

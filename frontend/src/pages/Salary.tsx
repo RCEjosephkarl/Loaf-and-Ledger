@@ -12,6 +12,7 @@ import {
 import { Money } from "@/components/Money";
 import { localISODateTime, money, percent } from "@/lib/format";
 import type { Breakdown, PayPeriod } from "@/lib/types";
+import { InfoNote } from "@/components/InfoNote";
 
 const KIND_LABEL: Record<string, string> = {
   gross: "Gross",
@@ -151,13 +152,16 @@ export function Salary() {
   return (
     <div>
       <div className="page-head">
-        <span className="eyebrow">02 · Salary</span>
-        <h1>What survives to net</h1>
-        <p>
-          {meta ? `${meta.modelled_as} — ${meta.tax_year} rules. ` : ""}
-          TRAIN brackets applied after SSS, PhilHealth and Pag-IBIG, which are deductible.
-          Planning-grade approximations, not tax-filing figures.
-        </p>
+        <h1>
+          Salary
+          <InfoNote label="About salary" lead="What survives to net.">
+            <p>
+              {meta ? `${meta.modelled_as} — ${meta.tax_year} rules. ` : ""}
+              TRAIN brackets applied after SSS, PhilHealth and Pag-IBIG, which are deductible.
+              Planning-grade approximations, not tax-filing figures.
+            </p>
+          </InfoNote>
+        </h1>
       </div>
 
       <div className="grid analytics-cols">
@@ -252,15 +256,18 @@ export function Salary() {
         <div className="grid" style={{ gap: 20 }}>
           <section className="card">
             <div className="card__head">
-              <h3>Post the payslip</h3>
-              <span className="eyebrow">F1 → F2</span>
+              <h3>
+                Post this payslip to the ledger
+                <InfoNote label="About posting a payslip">
+                  <p>
+                    A payslip is not one movement but several — gross earned, each withholding
+                    taken, the remainder banked. One balanced entry says all of it, and every
+                    figure then flows into the ledger, the budgets, and the analytics at once.
+                  </p>
+                </InfoNote>
+              </h3>
             </div>
             <div className="card__body">
-              <p className="muted card__blurb">
-                A payslip is not one movement but several — gross earned, each withholding taken,
-                the remainder banked. One balanced entry says all of it, and every figure then
-                flows into the ledger, the budgets, and the analytics at once.
-              </p>
               {active ? (
                 <PostToLedger profileId={active.id} />
               ) : (

@@ -55,7 +55,7 @@ export function WaterfallChart({
               label: "Amount",
               data: bars.map((b) => b.range),
               backgroundColor: bars.map((b) =>
-                b.isTotal ? palette.credit : b.value < 0 ? palette.debit : palette.green,
+                b.isTotal ? palette.credit : b.value < 0 ? palette.debit : palette.accent,
               ),
               borderRadius: 4,
               borderSkipped: false,

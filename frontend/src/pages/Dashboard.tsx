@@ -8,6 +8,7 @@ import { useChartPalette } from "@/lib/chartColors";
 import { money, moneyShort, percent, shortDate } from "@/lib/format";
 import { timeRangeLabel, useFilters } from "@/store/filters";
 import type { Insight } from "@/lib/types";
+import { InfoNote } from "@/components/InfoNote";
 
 function InsightRow({ i }: { i: Insight }) {
   return (
@@ -32,15 +33,19 @@ function BalanceTrendCard() {
   return (
     <section className="card dash-grid__wide">
       <div className="card__head">
-        <h3>Balance over time</h3>
-        <span className="pill">{timeRangeLabel(timeRange).toLowerCase()}</span>
+        <h3>
+          Balance over time
+          <InfoNote label="About this chart">
+            <p>
+              Cumulative net cash flow across the selected range — hover a point for that day's
+              in/out split. Transfers between your own accounts don't move this line; only real
+              income and spending do.
+            </p>
+          </InfoNote>
+        </h3>
+        <span className="pill">{timeRangeLabel(timeRange)}</span>
       </div>
       <div className="card__body">
-        <p className="muted card__blurb">
-          Cumulative net cash flow across the selected range — hover a point for that day's in/out
-          split. Transfers between your own accounts don't move this line; only real income and
-          spending do.
-        </p>
         {isLoading && <div className="empty">Tallying…</div>}
         {!isLoading && points.length === 0 && <div className="empty">No entries in this range.</div>}
         {points.length > 0 && (
@@ -74,14 +79,17 @@ function MonthlyCard() {
   return (
     <section className="card dash-grid__wide">
       <div className="card__head">
-        <h3>Month by month</h3>
-        <span className="eyebrow">income · expense · net</span>
+        <h3>
+          Income and expenses by month
+          <InfoNote label="About this chart">
+            <p>
+              Bars show what came in and went out each month; the line traces the net — above zero
+              and the loaf is rising.
+            </p>
+          </InfoNote>
+        </h3>
       </div>
       <div className="card__body">
-        <p className="muted card__blurb">
-          Bars show what came in and went out each month; the line traces the net — above zero and
-          the loaf is rising.
-        </p>
         <div style={{ height: 260 }}>
           <BarChart series={data?.series ?? []} />
         </div>
@@ -96,12 +104,15 @@ export function Dashboard() {
   return (
     <div>
       <div className="page-head">
-        <span className="eyebrow">01 · The books</span>
-        <h1>Where the dough goes</h1>
-        <p>
-          A running balance of what comes in and what goes out — with plain-spoken notes on how
-          you're tracking. Adjust the range and account up top; every figure follows.
-        </p>
+        <h1>
+          Dashboard
+          <InfoNote label="About the dashboard" lead="Where the dough goes.">
+            <p>
+              A running balance of what comes in and what goes out — with plain-spoken notes on
+              how you're tracking. Adjust the range and account up top; every figure follows.
+            </p>
+          </InfoNote>
+        </h1>
       </div>
 
       {isLoading && <div className="empty">Tallying the ledger…</div>}
@@ -116,13 +127,13 @@ export function Dashboard() {
             <table className="ledger balance__table">
               <tbody>
                 <tr>
-                  <td>Credits · money in</td>
+                  <td>Money in (credits)</td>
                   <td className="num">
                     <Money value={data.total_income} sign="credit" />
                   </td>
                 </tr>
                 <tr>
-                  <td>Debits · money out</td>
+                  <td>Money out (debits)</td>
                   <td className="num">
                     <Money value={`-${data.total_expense}`} sign="debit" />
                   </td>
@@ -147,7 +158,7 @@ export function Dashboard() {
             <div className="card stat">
               <span className="eyebrow">Savings rate</span>
               <div className="stat__value fig">{percent(data.savings_rate, 0)}</div>
-              <span className="stat__sub muted">of everything that came in, still yours</span>
+              <span className="stat__sub muted">Of everything that came in, still yours</span>
             </div>
             <div className="card stat">
               <span className="eyebrow">Net worth</span>
@@ -157,21 +168,21 @@ export function Dashboard() {
                   sign={Number(data.net_worth) >= 0 ? "credit" : "debit"}
                 />
               </div>
-              <span className="stat__sub muted">assets less liabilities, today</span>
+              <span className="stat__sub muted">Assets less liabilities, today</span>
             </div>
             <div className="card stat">
               <span className="eyebrow">Moved, not spent</span>
               <div className="stat__value">
                 <Money value={data.transfer_volume} />
               </div>
-              <span className="stat__sub muted">transfers between your own accounts</span>
+              <span className="stat__sub muted">Transfers between your own accounts</span>
             </div>
           </section>
 
           <section className="card insights">
             <div className="card__head">
-              <h3>Notes from the ledger</h3>
-              <span className="eyebrow">rule-based</span>
+              <h3>What we noticed</h3>
+              <span className="eyebrow">Plain comparisons, no model</span>
             </div>
             <div className="card__body">
               <ul className="insight-list">
@@ -184,7 +195,7 @@ export function Dashboard() {
 
           <section className="card">
             <div className="card__head">
-              <h3>Heaviest expenses</h3>
+              <h3>Biggest expenses</h3>
             </div>
             <div className="card__body">
               {data.top_expense_accounts.length === 0 ? (

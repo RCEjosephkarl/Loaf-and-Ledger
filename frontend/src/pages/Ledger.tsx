@@ -14,6 +14,7 @@ import { exportLedgerUrl } from "@/lib/api";
 import { entryDate, formatTime, localISODateTime, money } from "@/lib/format";
 import { useFilters } from "@/store/filters";
 import type { Account, EntryKind, JournalEntry, JournalLineInput } from "@/lib/types";
+import { InfoNote } from "@/components/InfoNote";
 
 const now = () => localISODateTime(new Date());
 
@@ -79,7 +80,7 @@ function QuickEntry({ accounts }: { accounts: Account[] }) {
   return (
     <section className="card">
       <div className="card__head">
-        <h3>New entry</h3>
+        <h3>Record an entry</h3>
         <span className="eyebrow">{spec.hint}</span>
       </div>
       <div className="card__body">
@@ -236,9 +237,9 @@ function JournalGrid({ accounts }: { accounts: Account[] }) {
     <section className="card">
       <button className="disclosure" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <span aria-hidden>{open ? "▾" : "▸"}</span>
-        <span>Advanced · journal entry</span>
+        <span>Advanced: write both sides yourself</span>
         <span className="eyebrow">
-          more than two lines — a payslip, a split bill, a part-payment
+          For entries with more than two lines — a payslip, a split bill, a part-payment
         </span>
       </button>
 
@@ -507,13 +508,16 @@ export function Ledger() {
   return (
     <div>
       <div className="page-head">
-        <span className="eyebrow">04 · Ledger</span>
-        <h1>Every entry, dated and dressed</h1>
-        <p>
-          Each line of this ledger is a balanced journal entry — debits on one side, credits on
-          the other, always equal. Record it the quick way and the app writes both sides for you;
-          open the advanced grid when an entry genuinely has more than two.
-        </p>
+        <h1>
+          Ledger
+          <InfoNote label="About the ledger" lead="Every entry, dated and dressed.">
+            <p>
+              Each line of this ledger is a balanced journal entry — debits on one side, credits
+              on the other, always equal. Record it the quick way and the app writes both sides
+              for you; open the advanced grid when an entry genuinely has more than two.
+            </p>
+          </InfoNote>
+        </h1>
       </div>
 
       <section className="stat-grid" style={{ marginBottom: 20 }}>
@@ -522,14 +526,14 @@ export function Ledger() {
           <div className="stat__value">
             <Money value={cashOnHand.toFixed(2)} sign={cashOnHand >= 0 ? "credit" : "debit"} />
           </div>
-          <span className="stat__sub muted">every asset account, right now</span>
+          <span className="stat__sub muted">Every asset account, right now</span>
         </div>
         <div className="card stat">
           <span className="eyebrow">Posted this period</span>
           <div className="stat__value">
             <Money value={periodTotal.toFixed(2)} />
           </div>
-          <span className="stat__sub muted">{entries?.length ?? 0} entries in range</span>
+          <span className="stat__sub muted">{entries?.length ?? 0} entries in this range</span>
         </div>
         <div className="card stat">
           <span className="eyebrow">Export</span>
@@ -538,7 +542,7 @@ export function Ledger() {
               ↓ Ledger CSV
             </a>
           </div>
-          <span className="stat__sub muted">one row per journal line</span>
+          <span className="stat__sub muted">One row per journal line</span>
         </div>
       </section>
 
@@ -548,8 +552,8 @@ export function Ledger() {
 
         <section className="card">
           <div className="card__head">
-            <h3>Entries</h3>
-            <span className="eyebrow">click a row to see both sides</span>
+            <h3>Recent entries</h3>
+            <span className="eyebrow">Click a row to see both sides</span>
           </div>
           <div className="card__body">
             {isLoading && <div className="empty">Reading the ledger…</div>}
