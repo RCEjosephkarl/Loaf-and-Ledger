@@ -12,7 +12,7 @@ def get_single_user(db: Session) -> User:
     """Return the one user, creating a default if the table is empty."""
     user = db.execute(select(User).order_by(User.id)).scalars().first()
     if user is None:
-        user = User(name="Breadwinner", base_currency="USD")
+        user = User(name="Breadwinner")
         db.add(user)
         db.commit()
         db.refresh(user)

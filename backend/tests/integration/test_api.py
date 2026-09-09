@@ -1,158 +1,301 @@
-"""API integration tests (FastAPI TestClient on SQLite)."""
+"""End-to-end coverage of the HTTP surface."""
 
 from __future__ import annotations
 
-from datetime import date
+from decimal import Decimal
 
 
-def test_health(client):
+def test_health_and_meta(client):
     assert client.get("/health").json()["status"] == "ok"
+    meta = client.get("/api/v1/meta").json()
+    assert meta["currency"] == "PHP"
+    assert meta["jurisdiction"] == "PH"
 
 
-def test_regions_lists_four(client):
-    regions = {r["region"] for r in client.get("/api/v1/regions").json()}
-    assert regions == {"PH", "US", "AU", "EU"}
+class TestAccounts:
+    def test_seeded_chart_is_listed(self, seeded_client):
+        accounts = seeded_client.get("/api/v1/accounts").json()
+        codes = {a["code"] for a in accounts}
+        assert {"1020", "4010", "5030", "6020"} <= codes
+        assert all(a["type"] in
+                   {"asset", "liability", "equity", "income", "expense"} for a in accounts)
+
+    def test_balances_include_a_type_rollup(self, seeded_client):
+        body = seeded_client.get("/api/v1/accounts/balances").json()
+        assert body["currency"] == "PHP"
+        assert "asset" in body["totals_by_type"]
+        assert Decimal(body["net_worth"]) != 0
+
+    def test_create_and_archive(self, seeded_client):
+        created = seeded_client.post(
+            "/api/v1/accounts",
+            json={"code": "5200", "name": "Pet care", "type": "expense"},
+        )
+        assert created.status_code == 201
+        account_id = created.json()["id"]
+
+        assert seeded_client.delete(f"/api/v1/accounts/{account_id}").status_code == 204
+        listed = {a["code"] for a in seeded_client.get("/api/v1/accounts").json()}
+        assert "5200" not in listed
+        with_archived = {
+            a["code"]
+            for a in seeded_client.get(
+                "/api/v1/accounts", params={"include_archived": True}
+            ).json()
+        }
+        assert "5200" in with_archived
+
+    def test_duplicate_code_is_rejected(self, seeded_client):
+        payload = {"code": "5210", "name": "First", "type": "expense"}
+        assert seeded_client.post("/api/v1/accounts", json=payload).status_code == 201
+        assert seeded_client.post("/api/v1/accounts", json=payload).status_code == 409
+
+    def test_a_seeded_account_with_postings_cannot_be_removed(self, seeded_client, chart):
+        response = seeded_client.delete(f"/api/v1/accounts/{chart['5010'].id}")
+        assert response.status_code == 409
+        assert "archived" in response.json()["detail"]
+
+    def test_posting_to_an_archived_account_is_rejected(self, seeded_client, chart):
+        created = seeded_client.post(
+            "/api/v1/accounts", json={"code": "5220", "name": "Temp", "type": "expense"}
+        ).json()
+        seeded_client.delete(f"/api/v1/accounts/{created['id']}")
+
+        response = seeded_client.post(
+            "/api/v1/ledger/entries/simple",
+            json={
+                "kind": "expense", "amount": "100.00", "account_id": chart["1010"].id,
+                "counter_account_id": created["id"], "occurred_at": "2026-06-10T10:00:00",
+            },
+        )
+        assert response.status_code == 422
+        assert "archived" in response.json()["detail"]
 
 
-def test_salary_calculate_does_not_persist(client):
-    r = client.post(
-        "/api/v1/salary/calculate",
-        json={"region": "US", "gross_amount": "6000", "pay_period": "monthly"},
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["currency"] == "USD"
-    assert float(body["net_period"]) < 6000
-    # nothing persisted
-    assert client.get("/api/v1/salary/profiles").json() == []
+class TestLedger:
+    def test_entries_carry_their_lines(self, seeded_client):
+        entries = seeded_client.get("/api/v1/ledger/entries").json()
+        assert entries
+        for entry in entries:
+            debits = sum(Decimal(line["debit"]) for line in entry["lines"])
+            credits = sum(Decimal(line["credit"]) for line in entry["lines"])
+            assert debits == credits, entry["id"]
+
+    def test_multi_line_entry_via_the_api(self, seeded_client, chart):
+        response = seeded_client.post(
+            "/api/v1/ledger/entries",
+            json={
+                "occurred_at": "2026-06-05T10:00:00",
+                "memo": "Split payment",
+                "lines": [
+                    {"account_id": chart["5030"].id, "debit": "600.00"},
+                    {"account_id": chart["5040"].id, "debit": "400.00"},
+                    {"account_id": chart["1040"].id, "credit": "1000.00"},
+                ],
+            },
+        )
+        assert response.status_code == 201
+        assert len(response.json()["lines"]) == 3
+
+    def test_unbalanced_entry_is_rejected_with_422(self, seeded_client, chart):
+        response = seeded_client.post(
+            "/api/v1/ledger/entries",
+            json={
+                "occurred_at": "2026-06-05T10:00:00",
+                "lines": [
+                    {"account_id": chart["5030"].id, "debit": "600.00"},
+                    {"account_id": chart["1040"].id, "credit": "500.00"},
+                ],
+            },
+        )
+        assert response.status_code == 422
+        assert "does not balance" in response.json()["detail"]
+
+    def test_filter_by_account_returns_whole_entries(self, seeded_client, chart):
+        entries = seeded_client.get(
+            "/api/v1/ledger/entries", params={"account_id": chart["5010"].id}
+        ).json()
+        assert entries
+        for entry in entries:
+            assert any(line["account_id"] == chart["5010"].id for line in entry["lines"])
+            # The counter-side line comes back too, not just the matched line.
+            assert len(entry["lines"]) >= 2
+
+    def test_voided_entries_are_hidden_by_default(self, seeded_client, chart):
+        entry = seeded_client.post(
+            "/api/v1/ledger/entries/simple",
+            json={
+                "kind": "expense", "amount": "100.00", "account_id": chart["1010"].id,
+                "counter_account_id": chart["5040"].id, "occurred_at": "2026-06-10T10:00:00",
+            },
+        ).json()
+        seeded_client.delete(f"/api/v1/ledger/entries/{entry['id']}")
+
+        visible = {e["id"] for e in seeded_client.get("/api/v1/ledger/entries").json()}
+        assert entry["id"] not in visible
+        with_voided = {
+            e["id"]
+            for e in seeded_client.get(
+                "/api/v1/ledger/entries", params={"include_voided": True}
+            ).json()
+        }
+        assert entry["id"] in with_voided
+
+    def test_missing_entry_is_404(self, seeded_client):
+        assert seeded_client.get("/api/v1/ledger/entries/999999").status_code == 404
 
 
-def test_create_and_activate_salary_profile(client):
-    r = client.post(
-        "/api/v1/salary/profiles",
-        json={"label": "Job", "region": "AU", "gross_amount": "9000", "pay_period": "monthly"},
-    )
-    assert r.status_code == 201
-    active = client.get("/api/v1/salary/profiles/active").json()
-    assert active["label"] == "Job"
-    assert active["region"] == "AU"
-    assert active["breakdown"]["region"] == "AU"
+class TestSalary:
+    def test_calculate_reconciles(self, client):
+        body = client.post(
+            "/api/v1/salary/calculate", json={"gross_amount": "32000", "pay_period": "monthly"}
+        ).json()
+        assert Decimal(body["gross_annual"]) - Decimal(body["total_deductions"]) == Decimal(
+            body["net_annual"]
+        )
+        assert body["gross_period"] == "32000.00"
+
+    def test_profile_roundtrip(self, client, chart):
+        created = client.post(
+            "/api/v1/salary/profiles",
+            json={"label": "Test job", "gross_amount": "45000", "pay_period": "monthly"},
+        )
+        assert created.status_code == 201
+        active = client.get("/api/v1/salary/profiles/active").json()
+        assert active["label"] == "Test job"
 
 
-def test_transaction_flow_and_category_direction_guard(client):
-    cats = client.get("/api/v1/ledger/categories", params={"direction": "outbound"}).json()
-    groceries = next(c for c in cats if c["name"] == "Groceries")
+class TestAnalytics:
+    def test_overview_shape(self, seeded_client):
+        body = seeded_client.get("/api/v1/analytics/overview").json()
+        assert body["currency"] == "PHP"
+        assert Decimal(body["total_income"]) > 0
+        assert Decimal(body["total_expense"]) > 0
+        assert body["accounts"]
 
-    ok = client.post(
-        "/api/v1/ledger/transactions",
-        json={
-            "direction": "outbound",
-            "category_id": groceries["id"],
-            "amount": "120.50",
-            "region": "US",
-            "occurred_on": str(date.today()),
-        },
-    )
-    assert ok.status_code == 201
-    assert ok.json()["currency"] == "USD"  # resolved from region
+    def test_monthly_series_is_chronological(self, seeded_client):
+        series = seeded_client.get("/api/v1/analytics/monthly", params={"months": 6}).json()[
+            "series"
+        ]
+        assert series == sorted(series, key=lambda p: p["month"])
 
-    # Mismatched direction is rejected.
-    bad = client.post(
-        "/api/v1/ledger/transactions",
-        json={
-            "direction": "inbound",
-            "category_id": groceries["id"],
-            "amount": "10",
-            "occurred_on": str(date.today()),
-        },
-    )
-    assert bad.status_code == 422
+    def test_monthly_by_account(self, seeded_client):
+        body = seeded_client.get("/api/v1/analytics/monthly-by-account").json()
+        assert body["months"]
+        for s in body["series"]:
+            assert len(s["values"]) == len(body["months"])
 
+    def test_running_balance_is_cumulative(self, seeded_client):
+        points = seeded_client.get("/api/v1/analytics/running-balance").json()["points"]
+        assert points
+        running = Decimal("0")
+        for point in points:
+            running += Decimal(point["net"])
+            assert Decimal(point["balance"]) == running
 
-def test_update_transaction(client):
-    cats = client.get("/api/v1/ledger/categories", params={"direction": "outbound"}).json()
-    groceries = next(c for c in cats if c["name"] == "Groceries")
-    dining = next(c for c in cats if c["name"] == "Dining")
-
-    created = client.post(
-        "/api/v1/ledger/transactions",
-        json={
-            "direction": "outbound",
-            "category_id": groceries["id"],
-            "amount": "50.00",
-            "currency": "USD",
-            "occurred_on": str(date.today()),
-            "description": "Original",
-        },
-    ).json()
-
-    patched = client.patch(
-        f"/api/v1/ledger/transactions/{created['id']}",
-        json={"category_id": dining["id"], "amount": "75.25", "description": "Updated"},
-    )
-    assert patched.status_code == 200
-    body = patched.json()
-    assert body["category_id"] == dining["id"]
-    assert float(body["amount"]) == 75.25
-    assert body["description"] == "Updated"
-    # Fields not included in the patch are untouched.
-    assert body["currency"] == "USD"
-    assert body["occurred_on"] == str(date.today())
-
-    missing = client.patch("/api/v1/ledger/transactions/999999", json={"amount": "1"})
-    assert missing.status_code == 404
+    def test_earnings_waterfall(self, seeded_client):
+        body = seeded_client.get("/api/v1/analytics/earnings").json()
+        kinds = [i["kind"] for i in body["items"]]
+        assert kinds[0] == "gross" and kinds[-1] == "net"
+        assert Decimal(body["gross"]) - Decimal(body["total_deductions"]) == Decimal(body["net"])
+        assert Decimal("0") < Decimal(body["take_home_rate"]) <= Decimal("1")
 
 
-def test_dashboard_currency_conversion(seeded_client):
-    usd = seeded_client.get("/api/v1/dashboard/summary", params={"currency": "USD"}).json()
-    php = seeded_client.get("/api/v1/dashboard/summary", params={"currency": "PHP"}).json()
-    assert float(usd["total_income"]) > 0
-    # 1 USD = 58 PHP in seed data
-    assert abs(float(php["total_income"]) - float(usd["total_income"]) * 58) < 1.0
-    assert php["currency"] == "PHP"
-    assert len(usd["insights"]) >= 1
+class TestDashboard:
+    def test_summary_agrees_with_analytics(self, seeded_client):
+        params = {"start": "2026-06-01", "end": "2026-06-30"}
+        summary = seeded_client.get("/api/v1/dashboard/summary", params=params).json()
+        overview = seeded_client.get("/api/v1/analytics/overview", params=params).json()
+        assert summary["total_income"] == overview["total_income"]
+        assert summary["total_expense"] == overview["total_expense"]
+        assert summary["net_cashflow"] == overview["net_cashflow"]
+
+    def test_insights_are_generated(self, seeded_client):
+        insights = seeded_client.get("/api/v1/dashboard/summary").json()["insights"]
+        assert insights
+        assert all(i["severity"] in {"info", "warning", "good"} for i in insights)
 
 
-def test_budget_upsert_and_status(seeded_client):
-    cats = seeded_client.get("/api/v1/ledger/categories", params={"direction": "outbound"}).json()
-    dining = next(c for c in cats if c["name"] == "Dining")
-    today = date.today()
-    up = seeded_client.post(
-        "/api/v1/budgets",
-        json={
-            "category_id": dining["id"],
-            "year": today.year,
-            "month": today.month,
-            "limit_amount": "300",
-        },
-    )
-    assert up.status_code == 201
-    # upsert: second call updates, not duplicates
-    seeded_client.post(
-        "/api/v1/budgets",
-        json={
-            "category_id": dining["id"],
-            "year": today.year,
-            "month": today.month,
-            "limit_amount": "350",
-        },
-    )
-    budgets = seeded_client.get("/api/v1/budgets").json()
-    dining_budgets = [b for b in budgets if b["category_id"] == dining["id"]]
-    assert len(dining_budgets) == 1
-    assert float(dining_budgets[0]["limit_amount"]) == 350.0
+class TestBudgets:
+    def test_status_matches_the_ledger(self, seeded_client, chart):
+        rows = seeded_client.get(
+            "/api/v1/budgets/status", params={"scope": "month"}
+        ).json()
+        assert rows
+        for row in rows:
+            expected = Decimal(row["limit_amount"]) - Decimal(row["spent"])
+            assert Decimal(row["remaining"]) == expected
 
-    status = seeded_client.get(
-        "/api/v1/budgets/status", params={"year": today.year, "month": today.month}
-    ).json()
-    assert any(s["category_name"] == "Groceries" for s in status)
+    def test_budgets_reject_non_expense_accounts(self, seeded_client, chart):
+        response = seeded_client.post(
+            "/api/v1/budgets",
+            json={"account_id": chart["1020"].id, "year": 2026, "month": 6, "limit_amount": "100"},
+        )
+        assert response.status_code == 422
+
+    def test_fund_override_roundtrip(self, seeded_client):
+        default = seeded_client.get("/api/v1/budgets/fund", params={"scope": "month"}).json()
+        assert default["is_override"] is False
+
+        seeded_client.post(
+            "/api/v1/budgets/fund", json={"scope": "month", "amount": "12345.00"}
+        )
+        overridden = seeded_client.get("/api/v1/budgets/fund", params={"scope": "month"}).json()
+        assert overridden["is_override"] is True
+        assert Decimal(overridden["amount"]) == Decimal("12345.00")
+
+        seeded_client.delete("/api/v1/budgets/fund", params={"scope": "month"})
+        assert (
+            seeded_client.get("/api/v1/budgets/fund", params={"scope": "month"}).json()[
+                "is_override"
+            ]
+            is False
+        )
 
 
-def test_csv_export(seeded_client):
-    r = seeded_client.get("/api/v1/export/expenses.csv", params={"currency": "USD"})
-    assert r.status_code == 200
-    assert "text/csv" in r.headers["content-type"]
-    lines = r.text.strip().splitlines()
-    assert lines[0].startswith("date,category,direction,amount,currency")
-    assert "amount_USD" in lines[0]
-    assert len(lines) > 1
+class TestExport:
+    def test_ledger_csv_is_line_grained(self, seeded_client):
+        response = seeded_client.get("/api/v1/export/ledger.csv")
+        assert response.status_code == 200
+        lines = response.text.strip().splitlines()
+        assert lines[0].startswith("entry_id,occurred_at,source")
+        assert len(lines) > 10
+
+    def test_trial_balance_ties(self, seeded_client):
+        response = seeded_client.get("/api/v1/export/trial-balance.csv")
+        rows = [r.split(",") for r in response.text.strip().splitlines()]
+        total = rows[-1]
+        assert total[1] == "TOTAL"
+        assert Decimal(total[3]) == Decimal(total[4])
+
+
+class TestSavingsRate:
+    """The reference income must span the same window as the expense.
+
+    An earlier version used the active payslip's net-per-period as the
+    reference, so over a multi-month range it compared one month of salary
+    against months of spending — producing rates like -326%.
+    """
+
+    def test_rate_is_dimensionally_sane_over_every_range(self, seeded_client):
+        for params in (
+            {},  # all time
+            {"start": "2026-06-01", "end": "2026-06-30"},
+            {"start": "2026-06-01", "end": "2026-09-30"},
+        ):
+            body = seeded_client.get("/api/v1/analytics/overview", params=params).json()
+            rate = Decimal(body["savings_rate"])
+            assert Decimal("-1") <= rate <= Decimal("1"), (params, rate)
+
+    def test_rate_equals_net_over_income(self, seeded_client):
+        body = seeded_client.get("/api/v1/analytics/overview").json()
+        income = Decimal(body["total_income"])
+        expected = ((income - Decimal(body["total_expense"])) / income).quantize(
+            Decimal("0.0001")
+        )
+        assert Decimal(body["savings_rate"]) == expected
+
+    def test_dashboard_agrees(self, seeded_client):
+        overview = seeded_client.get("/api/v1/analytics/overview").json()
+        summary = seeded_client.get("/api/v1/dashboard/summary").json()
+        assert overview["savings_rate"] == summary["savings_rate"]

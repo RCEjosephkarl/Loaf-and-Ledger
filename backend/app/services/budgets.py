@@ -10,9 +10,9 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.base import BudgetScope, Region
+from app.models.base import BudgetScope
 from app.models.budget import Budget
-from app.services import analytics as analytics_svc
+from app.warehouse import queries as wq
 
 ZERO = Decimal("0")
 
@@ -40,9 +40,7 @@ def period_bounds(
         end = date(*_add_months(anchor.year, anchor.month, 1), 1)
         months = [(anchor.year, m) for m in range(1, anchor.month + 1)]
     else:  # ALL — every month that has budget data for this user
-        rows = db.execute(
-            select(Budget.year, Budget.month).where(Budget.user_id == user_id)
-        ).all()
+        rows = db.execute(select(Budget.year, Budget.month).where(Budget.user_id == user_id)).all()
         months = sorted({(y, m) for y, m in rows})
         if months:
             start = date(months[0][0], months[0][1], 1)
@@ -68,25 +66,15 @@ def previous_period_end(scope: BudgetScope, anchor: date) -> date | None:
     return start - timedelta(days=1)
 
 
-def default_initial_fund(
-    db: Session,
-    user_id: int,
-    *,
-    scope: BudgetScope,
-    anchor: date,
-    currency: str,
-    region: Region | None,
-) -> Decimal:
-    """Carry-over default: the all-time cumulative running balance as of the
-    day before the period starts. There is no stored "opening balance"
-    concept anywhere in the app, so the only coherent definition of "what you
-    had going into this period" is the cumulative sum of every transaction
-    since records began, evaluated at the period boundary — the same figure
-    `running_balance` already surfaces elsewhere (Dashboard, Analytics)."""
+def default_initial_fund(scope: BudgetScope, anchor: date) -> Decimal:
+    """Carry-over default: the all-time cumulative net cash flow as of the day
+    before the period starts.
+
+    There is no stored "opening balance" concept for a period, so the only
+    coherent definition of "what you had going into this one" is the running
+    total the warehouse already maintains, read at the period boundary.
+    """
     end = previous_period_end(scope, anchor)
     if end is None:
         return ZERO
-    points = analytics_svc.running_balance(
-        db, user_id, currency=currency, start=None, end=end, region=region
-    )
-    return Decimal(str(points[-1]["balance"])) if points else ZERO
+    return wq.cumulative_balance_as_of(end)

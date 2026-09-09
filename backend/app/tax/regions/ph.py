@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from app.models.base import Region
 from app.tax.brackets import D, capped_contribution, progressive_tax
 from app.tax.engine import TaxRule, register
 from app.tax.models import Breakdown, LineItem, money
@@ -29,8 +28,7 @@ PAGIBIG_CEIL = D(60_000)  # 2% of max fund salary 5,000/month -> 100/month
 
 
 class PhilippinesRule(TaxRule):
-    region = Region.PH
-    currency = "PHP"
+    key = "PH"
     modelled_as = "Philippines (national)"
 
     def compute_annual(self, gross_annual: Decimal, year: int) -> Breakdown:
@@ -59,8 +57,6 @@ class PhilippinesRule(TaxRule):
             LineItem("net", "Net take-home", net, "net"),
         ]
         return Breakdown(
-            region=self.region.value,
-            currency=self.currency,
             tax_year=year,
             pay_period="annual",
             gross_annual=money(gross_annual),

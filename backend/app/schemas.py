@@ -2,23 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date, time
+from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.base import BudgetScope, Region, TxDirection
+from app.models.base import AccountType, BudgetScope, EntrySource, FlowClass
 from app.models.salary import PayPeriod
 
 # ---------------------------------------------------------------- meta / user
-
-
-class RegionInfo(BaseModel):
-    region: Region
-    name: str
-    currency: str
-    modelled_as: str
-    supported: bool
 
 
 class UserOut(BaseModel):
@@ -26,22 +18,158 @@ class UserOut(BaseModel):
     id: int
     name: str
     email: str | None
-    base_currency: str
-    default_region: Region
+    currency: str = "PHP"
 
 
 class UserUpdate(BaseModel):
     name: str | None = None
     email: str | None = None
-    base_currency: str | None = None
-    default_region: Region | None = None
+
+
+# ---------------------------------------------------------------- accounts
+
+
+class AccountOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    name: str
+    type: AccountType
+    subtype: str | None
+    is_statutory: bool
+    is_system: bool
+    is_active: bool
+    opening_balance: Decimal
+    archived_at: datetime | None
+
+
+class AccountCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=8)
+    name: str = Field(min_length=1, max_length=80)
+    type: AccountType
+    subtype: str | None = None
+    opening_balance: Decimal = Decimal("0")
+
+
+class AccountUpdate(BaseModel):
+    name: str | None = None
+    subtype: str | None = None
+    is_active: bool | None = None
+
+
+class AccountBalanceOut(BaseModel):
+    account_id: int
+    code: str
+    name: str
+    type: AccountType
+    subtype: str | None
+    is_active: bool
+    debits: Decimal
+    credits: Decimal
+    balance: Decimal
+
+
+class AccountBalancesResponse(BaseModel):
+    currency: str
+    as_of: datetime | None
+    accounts: list[AccountBalanceOut]
+    #: Net balance per account type, in each type's normal-balance direction.
+    totals_by_type: dict[str, Decimal]
+    net_worth: Decimal
+
+
+# ---------------------------------------------------------------- payees
+
+
+class PayeeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    default_account_id: int | None
+
+
+class PayeeCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    default_account_id: int | None = None
+
+
+# ---------------------------------------------------------------- journal
+
+
+class JournalLineIn(BaseModel):
+    account_id: int
+    debit: Decimal = Decimal("0")
+    credit: Decimal = Decimal("0")
+    memo: str | None = None
+
+    @model_validator(mode="after")
+    def one_side_only(self) -> JournalLineIn:
+        if self.debit and self.credit:
+            raise ValueError("A line is either a debit or a credit, not both")
+        if not self.debit and not self.credit:
+            raise ValueError("A line must carry an amount")
+        if self.debit < 0 or self.credit < 0:
+            raise ValueError("Amounts cannot be negative")
+        return self
+
+
+class JournalLineOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    line_no: int
+    account_id: int
+    debit: Decimal
+    credit: Decimal
+    memo: str | None
+
+
+class JournalEntryCreate(BaseModel):
+    occurred_at: datetime
+    lines: list[JournalLineIn] = Field(min_length=2)
+    memo: str | None = None
+    payee_id: int | None = None
+
+
+class SimpleEntryCreate(BaseModel):
+    """The quick-entry form: money in, money out, or a transfer.
+
+    `account_id` is always the balance-sheet side — where the money landed, or
+    where it came from. `counter_account_id` is the income or expense account
+    (or the other asset/liability account, for a transfer).
+    """
+
+    kind: str = Field(pattern="^(income|expense|transfer)$")
+    amount: Decimal = Field(gt=0)
+    account_id: int
+    counter_account_id: int
+    occurred_at: datetime
+    memo: str | None = None
+    payee_id: int | None = None
+
+
+class JournalEntryUpdate(BaseModel):
+    occurred_at: datetime | None = None
+    lines: list[JournalLineIn] | None = None
+    memo: str | None = None
+    payee_id: int | None = None
+
+
+class JournalEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    occurred_at: datetime
+    memo: str | None
+    payee_id: int | None
+    source: EntrySource
+    source_ref: str | None
+    voided_at: datetime | None
+    lines: list[JournalLineOut]
 
 
 # ---------------------------------------------------------------- F1 salary
 
 
 class SalaryCalcRequest(BaseModel):
-    region: Region
     gross_amount: Decimal = Field(gt=0)
     pay_period: PayPeriod = PayPeriod.MONTHLY
     tax_year: int | None = None
@@ -51,12 +179,11 @@ class SalaryLineItem(BaseModel):
     key: str
     label: str
     amount: Decimal
+    amount_period: Decimal
     kind: str
 
 
 class SalaryBreakdown(BaseModel):
-    region: str
-    currency: str
     tax_year: int
     pay_period: str
     gross_annual: Decimal
@@ -72,7 +199,6 @@ class SalaryBreakdown(BaseModel):
 
 class SalaryProfileCreate(BaseModel):
     label: str = "My salary"
-    region: Region
     gross_amount: Decimal = Field(gt=0)
     pay_period: PayPeriod = PayPeriod.MONTHLY
     tax_year: int | None = None
@@ -83,8 +209,6 @@ class SalaryProfileOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     label: str
-    region: Region
-    currency: str
     gross_amount: Decimal
     pay_period: PayPeriod
     tax_year: int
@@ -94,89 +218,39 @@ class SalaryProfileOut(BaseModel):
     is_active: bool
 
 
-# ---------------------------------------------------------------- categories
+class PayslipPostRequest(BaseModel):
+    deposit_account_id: int
+    occurred_at: datetime | None = None
 
 
-class CategoryOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    name: str
-    direction: TxDirection
-    statutory: bool
-    region: Region | None
-    is_system: bool
-
-
-class CategoryCreate(BaseModel):
-    name: str
-    direction: TxDirection
-
-
-# ---------------------------------------------------------------- F2 ledger
-
-
-class TransactionCreate(BaseModel):
-    direction: TxDirection
-    category_id: int
-    amount: Decimal = Field(gt=0)
-    currency: str | None = None  # defaults to region/base currency if omitted
-    region: Region | None = None
-    occurred_on: date
-    occurred_time: time | None = None
-    description: str | None = None
-
-
-class TransactionUpdate(BaseModel):
-    category_id: int | None = None
-    amount: Decimal | None = None
-    currency: str | None = None
-    occurred_on: date | None = None
-    occurred_time: time | None = None
-    description: str | None = None
-
-
-class TransactionOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    direction: TxDirection
-    category_id: int
-    amount: Decimal
-    currency: str
-    region: Region | None
-    occurred_on: date
-    occurred_time: time | None
-    description: str | None
-
-
-class TransactionBalancesResponse(BaseModel):
-    currency: str
-    balances: dict[int, Decimal]
+class PayslipPostResponse(BaseModel):
+    entry: JournalEntryOut
+    created: bool
 
 
 # ---------------------------------------------------------------- F4 budgets
 
 
 class BudgetCreate(BaseModel):
-    category_id: int
+    account_id: int
     year: int
     month: int = Field(ge=1, le=12)
     limit_amount: Decimal = Field(gt=0)
-    currency: str | None = None
 
 
 class BudgetOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    category_id: int
+    account_id: int
     year: int
     month: int
     limit_amount: Decimal
-    currency: str
 
 
 class BudgetStatus(BaseModel):
-    category_id: int
-    category_name: str
+    account_id: int
+    account_name: str
+    account_code: str
     year: int | None = None  # populated for scope=month, else None
     month: int | None = None
     scope: str = "month"
@@ -186,7 +260,6 @@ class BudgetStatus(BaseModel):
     spent: Decimal
     remaining: Decimal
     utilization: Decimal
-    currency: str
     over_budget: bool
 
 
@@ -194,7 +267,6 @@ class FundOverrideIn(BaseModel):
     scope: BudgetScope
     anchor: date | None = None
     amount: Decimal
-    currency: str | None = None
 
 
 class FundStatus(BaseModel):
@@ -202,18 +274,21 @@ class FundStatus(BaseModel):
     period_start: date
     period_end: date  # inclusive
     amount: Decimal
-    currency: str
     is_override: bool
 
 
-# ---------------------------------------------------------------- F3/F6 analytics
+# ---------------------------------------------------------------- analytics
 
 
-class CategoryTotal(BaseModel):
-    category_id: int | None
-    category_name: str
-    direction: TxDirection
+class AccountTotal(BaseModel):
+    account_id: int
+    code: str
+    account_name: str
+    type: AccountType
+    flow_class: FlowClass
+    is_statutory: bool
     total: Decimal
+    entries: int
 
 
 class Insight(BaseModel):
@@ -223,47 +298,40 @@ class Insight(BaseModel):
     detail: str
 
 
-class MonthlyCategorySeries(BaseModel):
-    category_id: int | None
-    category_name: str
-    values: list[Decimal]
-
-
-class MonthlyByCategoryResponse(BaseModel):
+class AnalyticsOverview(BaseModel):
     currency: str
-    months: list[str]  # "YYYY-MM", oldest -> newest
-    series: list[MonthlyCategorySeries]
-
-
-class DashboardSummary(BaseModel):
-    currency: str
-    region: Region | None
     total_income: Decimal
     total_expense: Decimal
     net_cashflow: Decimal
+    transfer_volume: Decimal
     salary_net_period: Decimal | None
+    salary_deduction_rate: Decimal | None
     savings_rate: Decimal
-    top_expense_categories: list[CategoryTotal]
-    insights: list[Insight]
+    accounts: list[AccountTotal]
 
 
-# ---------------------------------------------------------------- FX rates (live)
+class MonthlyPoint(BaseModel):
+    month: str
+    income: Decimal
+    expense: Decimal
+    net: Decimal
 
 
-class FxRatePoint(BaseModel):
-    date: date
-    rates: dict[str, Decimal]
+class MonthlyResponse(BaseModel):
+    currency: str
+    series: list[MonthlyPoint]
 
 
-class FxRatesResponse(BaseModel):
-    base: str
-    quotes: list[str]
-    live: bool
-    as_of: date | None
-    series: list[FxRatePoint]
+class MonthlyAccountSeries(BaseModel):
+    account_id: int
+    account_name: str
+    values: list[Decimal]
 
 
-# ---------------------------------------------------------------- running balance
+class MonthlyByAccountResponse(BaseModel):
+    currency: str
+    months: list[str]  # "YYYY-MM", oldest -> newest
+    series: list[MonthlyAccountSeries]
 
 
 class RunningBalancePoint(BaseModel):
@@ -272,8 +340,61 @@ class RunningBalancePoint(BaseModel):
     expense: Decimal
     net: Decimal
     balance: Decimal
+    cumulative_balance: Decimal
 
 
 class RunningBalanceResponse(BaseModel):
     currency: str
     points: list[RunningBalancePoint]
+
+
+class EarningsItem(BaseModel):
+    key: str
+    label: str
+    kind: str
+    amount: Decimal
+    amount_annual: Decimal
+
+
+class EarningsResponse(BaseModel):
+    currency: str
+    profile_id: int | None
+    tax_year: int | None
+    pay_period: str | None
+    gross: Decimal
+    net: Decimal
+    total_deductions: Decimal
+    take_home_rate: Decimal
+    items: list[EarningsItem]
+
+
+class DashboardSummary(BaseModel):
+    currency: str
+    total_income: Decimal
+    total_expense: Decimal
+    net_cashflow: Decimal
+    transfer_volume: Decimal
+    salary_net_period: Decimal | None
+    savings_rate: Decimal
+    net_worth: Decimal
+    top_expense_accounts: list[AccountTotal]
+    insights: list[Insight]
+
+
+# ---------------------------------------------------------------- warehouse
+
+
+class WarehouseStatusOut(BaseModel):
+    ok: bool
+    is_stale: bool
+    last_loaded_at: datetime | None
+    oltp_lines: int
+    olap_lines: int
+    drift: int
+    integrity_problems: list[dict]
+    note: str | None
+    warehouse_path: str
+
+
+class WarehouseRebuildOut(BaseModel):
+    counts: dict[str, int]

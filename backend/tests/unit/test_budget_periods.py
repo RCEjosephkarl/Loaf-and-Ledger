@@ -36,16 +36,23 @@ def test_all_scope_without_budgets_falls_back_to_anchor_month(db_session):
     assert (start, end, months) == (date(2026, 5, 1), date(2026, 6, 1), [])
 
 
-def test_all_scope_spans_every_budgeted_month(db_session):
+def test_all_scope_spans_every_budgeted_month(db_session, chart, user_id):
+    groceries = chart["5030"].id
     db_session.add_all(
         [
-            Budget(user_id=1, category_id=1, year=2025, month=11, limit_amount=Decimal("100"), currency="USD"),
-            Budget(user_id=1, category_id=1, year=2026, month=3, limit_amount=Decimal("100"), currency="USD"),
+            Budget(
+                user_id=user_id, account_id=groceries, year=2025, month=11,
+                limit_amount=Decimal("100"),
+            ),
+            Budget(
+                user_id=user_id, account_id=groceries, year=2026, month=3,
+                limit_amount=Decimal("100"),
+            ),
         ]
     )
     db_session.commit()
 
-    start, end, months = period_bounds(db_session, 1, BudgetScope.ALL, date(2026, 6, 1))
+    start, end, months = period_bounds(db_session, user_id, BudgetScope.ALL, date(2026, 6, 1))
     assert start == date(2025, 11, 1)
     assert end == date(2026, 4, 1)
     assert months == [(2025, 11), (2026, 3)]

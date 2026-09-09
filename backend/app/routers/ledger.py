@@ -1,8 +1,14 @@
-"""F2 — ledger: categories + categorized inbound/outbound transactions."""
+"""F2 — the ledger: double-entry journal CRUD.
+
+Every mutation here follows the same shape: commit to the OLTP journal, then
+write through to the warehouse so analytics are coherent before the response
+returns. The warehouse write is deliberately allowed to fail without failing
+the ledger write — see `etl.safe_apply_entry`.
+"""
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -10,164 +16,150 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import current_user
-from app.models.base import REGION_CURRENCY, Region, TxDirection
-from app.models.category import Category
-from app.models.transaction import Transaction
+from app.models.base import EntrySource
+from app.models.journal import JournalEntry, JournalLine
 from app.models.user import User
 from app.schemas import (
-    CategoryCreate,
-    CategoryOut,
-    TransactionBalancesResponse,
-    TransactionCreate,
-    TransactionOut,
-    TransactionUpdate,
+    JournalEntryCreate,
+    JournalEntryOut,
+    JournalEntryUpdate,
+    SimpleEntryCreate,
 )
-from app.services import analytics as analytics_svc
+from app.services import journal as journal_svc
+from app.warehouse import etl
 
 router = APIRouter(prefix="/ledger", tags=["ledger"])
 
 
-# ------------------------------------------------------------------ categories
-
-
-@router.get("/categories", response_model=list[CategoryOut])
-def list_categories(
-    direction: TxDirection | None = None,
-    include_statutory: bool = True,
-    db: Session = Depends(get_db),
-):
-    stmt = select(Category)
-    if direction is not None:
-        stmt = stmt.where(Category.direction == direction)
-    if not include_statutory:
-        stmt = stmt.where(Category.statutory.is_(False))
-    return db.execute(stmt.order_by(Category.direction, Category.name)).scalars().all()
-
-
-@router.post("/categories", response_model=CategoryOut, status_code=201)
-def create_category(
-    payload: CategoryCreate, user: User = Depends(current_user), db: Session = Depends(get_db)
-):
-    exists = db.execute(
-        select(Category).where(
-            Category.name == payload.name, Category.direction == payload.direction
+def _line_inputs(lines) -> list[journal_svc.LineInput]:  # noqa: ANN001
+    return [
+        journal_svc.LineInput(
+            account_id=line.account_id, debit=line.debit, credit=line.credit, memo=line.memo
         )
-    ).scalar_one_or_none()
-    if exists is not None:
-        raise HTTPException(409, "Category with this name and direction already exists")
-    cat = Category(
-        name=payload.name,
-        direction=payload.direction,
-        statutory=False,
-        is_system=False,
-        user_id=user.id,
-    )
-    db.add(cat)
-    db.commit()
-    db.refresh(cat)
-    return cat
+        for line in lines
+    ]
 
 
-# ---------------------------------------------------------------- transactions
-
-
-def _resolve_currency(payload_currency: str | None, region: Region | None, user: User) -> str:
-    if payload_currency:
-        return payload_currency.upper()
-    if region is not None:
-        return REGION_CURRENCY[region]
-    return user.base_currency
-
-
-@router.get("/transactions", response_model=list[TransactionOut])
-def list_transactions(
+@router.get("/entries", response_model=list[JournalEntryOut])
+def list_entries(
     start: date | None = None,
     end: date | None = None,
-    region: Region | None = None,
-    direction: TxDirection | None = None,
+    account_id: int | None = None,
+    source: EntrySource | None = None,
+    include_voided: bool = False,
     limit: int = Query(500, le=2000),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    stmt = select(Transaction).where(Transaction.user_id == user.id)
+    stmt = select(JournalEntry).where(JournalEntry.user_id == user.id)
+    if not include_voided:
+        stmt = stmt.where(JournalEntry.voided_at.is_(None))
     if start is not None:
-        stmt = stmt.where(Transaction.occurred_on >= start)
+        stmt = stmt.where(JournalEntry.occurred_at >= datetime.combine(start, time.min))
     if end is not None:
-        stmt = stmt.where(Transaction.occurred_on <= end)
-    if region is not None:
-        stmt = stmt.where(Transaction.region == region)
-    if direction is not None:
-        stmt = stmt.where(Transaction.direction == direction)
-    stmt = stmt.order_by(
-        Transaction.occurred_on.desc(), Transaction.occurred_time.desc(), Transaction.id.desc()
-    ).limit(limit)
+        stmt = stmt.where(JournalEntry.occurred_at <= datetime.combine(end, time.max))
+    if source is not None:
+        stmt = stmt.where(JournalEntry.source == source)
+    if account_id is not None:
+        # Match the whole entry, not the single line: an expense paid from a
+        # card should still show both of its sides when filtered by the card.
+        stmt = stmt.where(
+            JournalEntry.id.in_(
+                select(JournalLine.entry_id).where(JournalLine.account_id == account_id)
+            )
+        )
+    stmt = stmt.order_by(JournalEntry.occurred_at.desc(), JournalEntry.id.desc()).limit(limit)
     return db.execute(stmt).scalars().all()
 
 
-@router.get("/transactions/balances", response_model=TransactionBalancesResponse)
-def transaction_balances(
-    currency: str | None = None,
-    region: Region | None = None,
+@router.get("/entries/{entry_id}", response_model=JournalEntryOut)
+def get_entry(entry_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        return journal_svc.get_entry(db, user.id, entry_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.post("/entries", response_model=JournalEntryOut, status_code=201)
+def create_entry(
+    payload: JournalEntryCreate,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    """Full-history cumulative balance per transaction — feeds the Ledger
-    table's running-balance column."""
-    ccy = (currency or user.base_currency).upper()
-    balances = analytics_svc.running_balance_by_transaction(db, user.id, currency=ccy, region=region)
-    return TransactionBalancesResponse(currency=ccy, balances=balances)
+    """Post a full multi-line journal entry."""
+    try:
+        entry = journal_svc.post_entry(
+            db,
+            user.id,
+            occurred_at=payload.occurred_at,
+            lines=_line_inputs(payload.lines),
+            memo=payload.memo,
+            payee_id=payload.payee_id,
+        )
+    except journal_svc.JournalError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    etl.safe_apply_entry(db, entry.id)
+    return entry
 
 
-@router.post("/transactions", response_model=TransactionOut, status_code=201)
-def create_transaction(
-    payload: TransactionCreate, user: User = Depends(current_user), db: Session = Depends(get_db)
-):
-    category = db.get(Category, payload.category_id)
-    if category is None:
-        raise HTTPException(404, "Category not found")
-    if category.direction != payload.direction:
-        raise HTTPException(422, "Category direction does not match transaction direction")
-
-    tx = Transaction(
-        user_id=user.id,
-        direction=payload.direction,
-        category_id=payload.category_id,
-        amount=payload.amount,
-        currency=_resolve_currency(payload.currency, payload.region, user),
-        region=payload.region,
-        occurred_on=payload.occurred_on,
-        occurred_time=payload.occurred_time,
-        description=payload.description,
-    )
-    db.add(tx)
-    db.commit()
-    db.refresh(tx)
-    return tx
-
-
-@router.patch("/transactions/{tx_id}", response_model=TransactionOut)
-def update_transaction(
-    tx_id: int,
-    payload: TransactionUpdate,
+@router.post("/entries/simple", response_model=JournalEntryOut, status_code=201)
+def create_simple_entry(
+    payload: SimpleEntryCreate,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    tx = db.get(Transaction, tx_id)
-    if tx is None or tx.user_id != user.id:
-        raise HTTPException(404, "Transaction not found")
-    for key, value in payload.model_dump(exclude_unset=True).items():
-        setattr(tx, key, value)
-    db.commit()
-    db.refresh(tx)
-    return tx
+    """Quick entry: money in, money out, or a transfer between own accounts."""
+    try:
+        entry = journal_svc.simple_entry(
+            db,
+            user.id,
+            kind=payload.kind,
+            amount=payload.amount,
+            account_id=payload.account_id,
+            counter_account_id=payload.counter_account_id,
+            occurred_at=payload.occurred_at,
+            memo=payload.memo,
+            payee_id=payload.payee_id,
+        )
+    except journal_svc.JournalError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    etl.safe_apply_entry(db, entry.id)
+    return entry
 
 
-@router.delete("/transactions/{tx_id}", status_code=204)
-def delete_transaction(
-    tx_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)
+@router.patch("/entries/{entry_id}", response_model=JournalEntryOut)
+def update_entry(
+    entry_id: int,
+    payload: JournalEntryUpdate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
 ):
-    tx = db.get(Transaction, tx_id)
-    if tx is None or tx.user_id != user.id:
-        raise HTTPException(404, "Transaction not found")
-    db.delete(tx)
-    db.commit()
+    data = payload.model_dump(exclude_unset=True)
+    try:
+        entry = journal_svc.update_entry(
+            db,
+            user.id,
+            entry_id,
+            occurred_at=payload.occurred_at,
+            lines=_line_inputs(payload.lines) if payload.lines is not None else None,
+            memo=payload.memo,
+            payee_id=payload.payee_id,
+            clear_payee="payee_id" in data and payload.payee_id is None,
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except journal_svc.JournalError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    etl.safe_apply_entry(db, entry.id)
+    return entry
+
+
+@router.delete("/entries/{entry_id}", status_code=204)
+def void_entry(entry_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Void an entry. The row survives — a ledger you can silently erase from
+    is not auditable — but it leaves every balance and every analytic."""
+    try:
+        journal_svc.void_entry(db, user.id, entry_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    etl.safe_apply_entry(db, entry_id)

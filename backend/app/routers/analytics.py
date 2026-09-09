@@ -1,127 +1,117 @@
-"""F3 — cross-metric analytics derived from salary (F1) + ledger (F2)."""
+"""F3 — analytics, served from the OLAP warehouse.
+
+Every endpoint here is a thin translation of a warehouse query into a response
+model. The aggregation itself happens in DuckDB (see app/warehouse/queries.py),
+not in Python — which is the whole point of having a second store.
+"""
 
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import current_user
-from app.models.base import Region, TxDirection
+from app.models.base import CURRENCY
+from app.models.salary import SalaryProfile
 from app.models.user import User
-from app.schemas import CategoryTotal, MonthlyByCategoryResponse, RunningBalancePoint
-from app.services import analytics as svc
-from app.services.currency import convert
-from app.tax.models import money
+from app.schemas import (
+    AccountTotal,
+    AnalyticsOverview,
+    EarningsResponse,
+    MonthlyByAccountResponse,
+    MonthlyResponse,
+    RunningBalanceResponse,
+)
+from app.services import insights as insights_svc
+from app.warehouse import queries as wq
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-def _resolve_currency(currency: str | None, user: User) -> str:
-    return (currency or user.base_currency).upper()
-
-
-@router.get("/overview")
-def overview(
-    currency: str | None = None,
-    start: date | None = None,
-    end: date | None = None,
-    region: Region | None = None,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-):
-    """Income/expense totals, per-category breakdown, and salary-vs-spend."""
-    ccy = _resolve_currency(currency, user)
-    agg = svc.aggregate(db, user.id, currency=ccy, start=start, end=end, region=region)
-
-    salary = svc.active_salary(db, user.id)
-    salary_net_period = None
-    deduction_rate = None
-    if salary is not None:
-        net_period = Decimal(str(salary.breakdown.get("net_period", "0")))
-        salary_net_period = convert(db, net_period, salary.currency, ccy)
-        deduction_rate = Decimal(str(salary.breakdown.get("effective_rate", "0")))
-
-    reference = salary_net_period if salary_net_period else agg["total_income"]
-    return {
-        "currency": ccy,
-        "region": region,
-        "total_income": agg["total_income"],
-        "total_expense": agg["total_expense"],
-        "net_cashflow": agg["net_cashflow"],
-        "salary_net_period": salary_net_period,
-        "salary_deduction_rate": deduction_rate,
-        "savings_rate": svc.savings_rate(reference, agg["total_expense"]),
-        "categories": [CategoryTotal(**c) for c in agg["per_category"]],
-    }
-
-
-@router.get("/monthly")
-def monthly(
-    currency: str | None = None,
-    months: int = Query(6, ge=1, le=36),
-    region: Region | None = None,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-):
-    """Monthly income vs expense time series (converted to `currency`)."""
-    ccy = _resolve_currency(currency, user)
-    txns = svc._query_transactions(db, user.id, None, None, region)
-
-    buckets: dict[str, dict[str, Decimal]] = defaultdict(
-        lambda: {"income": Decimal("0"), "expense": Decimal("0")}
+def active_salary(db: Session, user_id: int) -> SalaryProfile | None:
+    return (
+        db.execute(
+            select(SalaryProfile)
+            .where(SalaryProfile.user_id == user_id, SalaryProfile.is_active.is_(True))
+            .order_by(SalaryProfile.updated_at.desc())
+        )
+        .scalars()
+        .first()
     )
-    for tx in txns:
-        key = f"{tx.occurred_on.year:04d}-{tx.occurred_on.month:02d}"
-        amt = convert(db, Decimal(str(tx.amount)), tx.currency, ccy)
-        side = "income" if tx.direction == TxDirection.INBOUND else "expense"
-        buckets[key][side] += amt
-
-    series = [
-        {
-            "month": k,
-            "income": money(v["income"]),
-            "expense": money(v["expense"]),
-            "net": money(v["income"] - v["expense"]),
-        }
-        for k, v in sorted(buckets.items())
-    ][-months:]
-    return {"currency": ccy, "series": series}
 
 
-@router.get("/monthly-by-category", response_model=MonthlyByCategoryResponse)
-def monthly_by_category(
-    currency: str | None = None,
-    months: int = Query(6, ge=1, le=36),
-    region: Region | None = None,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-):
-    """Trailing-N-month expense breakdown per category — feeds the Analytics
-    stacked-by-category chart."""
-    ccy = _resolve_currency(currency, user)
-    result = svc.monthly_expense_by_category(db, user.id, currency=ccy, months=months, region=region)
-    return MonthlyByCategoryResponse(currency=ccy, **result)
+def salary_reference(db: Session, user_id: int) -> tuple[Decimal | None, Decimal | None]:
+    """(net per period, effective deduction rate) from the active payslip."""
+    profile = active_salary(db, user_id)
+    if profile is None:
+        return None, None
+    breakdown = profile.breakdown or {}
+    net = Decimal(str(breakdown.get("net_period", "0")))
+    rate = Decimal(str(breakdown.get("effective_rate", "0")))
+    return (net or None), rate
 
 
-@router.get("/running-balance")
-def running_balance(
-    currency: str | None = None,
+@router.get("/overview", response_model=AnalyticsOverview)
+def overview(
     start: date | None = None,
     end: date | None = None,
-    region: Region | None = None,
+    account_id: int | None = None,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    """Cumulative net cash flow over the range — feeds the Analytics cash-flow
-    trend chart and the Budgets running-balance chart (item 2c / item 7)."""
-    ccy = _resolve_currency(currency, user)
-    points = svc.running_balance(db, user.id, currency=ccy, start=start, end=end, region=region)
-    return {
-        "currency": ccy,
-        "points": [RunningBalancePoint(**p) for p in points],
-    }
+    """Income/expense totals plus the per-account breakdown behind them."""
+    totals = wq.totals(start, end, account_id)
+    accounts = wq.by_account(start, end, account_id)
+    net_period, deduction_rate = salary_reference(db, user.id)
+
+    return AnalyticsOverview(
+        currency=CURRENCY,
+        total_income=totals["total_income"],
+        total_expense=totals["total_expense"],
+        net_cashflow=totals["net_cashflow"],
+        transfer_volume=totals["transfer_volume"],
+        salary_net_period=net_period,
+        salary_deduction_rate=deduction_rate,
+        savings_rate=insights_svc.savings_rate(
+            totals["total_income"], totals["total_expense"]
+        ),
+        accounts=[AccountTotal(**a) for a in accounts],
+    )
+
+
+@router.get("/monthly", response_model=MonthlyResponse)
+def monthly(months: int = Query(6, ge=1, le=36)):
+    """Monthly income vs expense, straight off the monthly rollup."""
+    return MonthlyResponse(currency=CURRENCY, series=wq.monthly(months))
+
+
+@router.get("/monthly-by-account", response_model=MonthlyByAccountResponse)
+def monthly_by_account(
+    months: int = Query(6, ge=1, le=36),
+    flow: str = Query("outflow", pattern="^(inflow|outflow)$"),
+):
+    """Trailing-N-month totals per account — feeds the stacked mix chart."""
+    result = wq.monthly_by_account(months, flow)
+    return MonthlyByAccountResponse(currency=CURRENCY, **result)
+
+
+@router.get("/running-balance", response_model=RunningBalanceResponse)
+def running_balance(start: date | None = None, end: date | None = None):
+    """Daily in/out with a cumulative balance across the range."""
+    return RunningBalanceResponse(currency=CURRENCY, points=wq.running_balance(start, end))
+
+
+@router.get("/earnings", response_model=EarningsResponse)
+def earnings(profile_id: int | None = None):
+    """The gross-to-net story: what was earned, what was withheld, what landed.
+
+    Read from fact_payslip_item rather than parsing the profile's JSON
+    snapshot, so the waterfall and the ledger agree by construction.
+    """
+    result = wq.earnings_breakdown(profile_id)
+    return EarningsResponse(currency=CURRENCY, **result)

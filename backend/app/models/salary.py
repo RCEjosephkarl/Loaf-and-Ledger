@@ -9,7 +9,7 @@ from decimal import Decimal
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, JSONVariant, Money, Region
+from app.models.base import Base, JSONVariant, Money
 
 
 class PayPeriod(str, enum.Enum):
@@ -25,8 +25,6 @@ class SalaryProfile(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     label: Mapped[str] = mapped_column(String(120), default="My salary")
-    region: Mapped[Region] = mapped_column(Enum(Region))
-    currency: Mapped[str] = mapped_column(String(3))
     gross_amount: Mapped[Decimal] = mapped_column(Money)
     pay_period: Mapped[PayPeriod] = mapped_column(Enum(PayPeriod), default=PayPeriod.MONTHLY)
     tax_year: Mapped[int] = mapped_column(Integer)
@@ -34,7 +32,8 @@ class SalaryProfile(Base):
     # Computed at save time so history survives later rule changes.
     net_amount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
     total_deductions: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
-    # Full line-item breakdown (tax, each social contribution, net) as JSONB.
+    # Full line-item breakdown (tax, each contribution, net) as JSONB. This is
+    # also the source for the warehouse's fact_payslip_item.
     breakdown: Mapped[dict] = mapped_column(JSONVariant, default=dict)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

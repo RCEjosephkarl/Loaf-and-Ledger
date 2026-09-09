@@ -1,10 +1,10 @@
-"""F5 — server-generated CSV export of expenses (streamed, stdlib csv)."""
+"""F5 — server-generated CSV export of the ledger (streamed, stdlib csv)."""
 
 from __future__ import annotations
 
 import csv
 import io
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
@@ -14,72 +14,88 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import current_user
-from app.models.base import Region, TxDirection
-from app.models.fx import ExchangeRateHistory
-from app.models.transaction import Transaction
+from app.models.account import Account
+from app.models.base import CURRENCY
+from app.models.journal import JournalEntry, JournalLine
 from app.models.user import User
-from app.services.analytics import category_map
-from app.services.currency import convert
 
 router = APIRouter(prefix="/export", tags=["export"])
 
+HEADER = [
+    "entry_id",
+    "occurred_at",
+    "source",
+    "memo",
+    "line_no",
+    "account_code",
+    "account_name",
+    "account_type",
+    "debit",
+    "credit",
+    "currency",
+]
 
-def _rows(db: Session, user: User, start, end, region, direction, display_currency):
-    cats = category_map(db)
-    stmt = select(Transaction).where(
-        Transaction.user_id == user.id, Transaction.direction == direction
+
+def _rows(db: Session, user: User, start: date | None, end: date | None, account_id: int | None):
+    """One row per journal line — the export granularity that keeps a
+    double-entry ledger reconstructable from the CSV alone."""
+    accounts = {a.id: a for a in db.execute(select(Account)).scalars()}
+
+    stmt = (
+        select(JournalEntry)
+        .where(JournalEntry.user_id == user.id, JournalEntry.voided_at.is_(None))
+        .order_by(JournalEntry.occurred_at, JournalEntry.id)
     )
     if start is not None:
-        stmt = stmt.where(Transaction.occurred_on >= start)
+        stmt = stmt.where(JournalEntry.occurred_at >= datetime.combine(start, time.min))
     if end is not None:
-        stmt = stmt.where(Transaction.occurred_on <= end)
-    if region is not None:
-        stmt = stmt.where(Transaction.region == region)
-    stmt = stmt.order_by(Transaction.occurred_on)
-
-    header = ["date", "category", "direction", "amount", "currency", "region", "description"]
-    if display_currency:
-        header += [f"amount_{display_currency.upper()}"]
-    yield header
-
-    for tx in db.execute(stmt).scalars():
-        row = [
-            tx.occurred_on.isoformat(),
-            cats.get(tx.category_id).name if tx.category_id in cats else "Uncategorized",
-            tx.direction.value,
-            f"{Decimal(str(tx.amount)):.2f}",
-            tx.currency,
-            tx.region.value if tx.region else "",
-            tx.description or "",
-        ]
-        if display_currency:
-            row.append(
-                f"{convert(db, Decimal(str(tx.amount)), tx.currency, display_currency.upper()):.2f}"
+        stmt = stmt.where(JournalEntry.occurred_at <= datetime.combine(end, time.max))
+    if account_id is not None:
+        stmt = stmt.where(
+            JournalEntry.id.in_(
+                select(JournalLine.entry_id).where(JournalLine.account_id == account_id)
             )
-        yield row
+        )
+
+    yield HEADER
+    for entry in db.execute(stmt).scalars():
+        for line in entry.lines:
+            account = accounts.get(line.account_id)
+            yield [
+                entry.id,
+                entry.occurred_at.isoformat(sep=" ", timespec="minutes"),
+                entry.source.value,
+                entry.memo or "",
+                line.line_no,
+                account.code if account else "",
+                account.name if account else "Unknown",
+                account.type.value if account else "",
+                f"{Decimal(str(line.debit)):.2f}",
+                f"{Decimal(str(line.credit)):.2f}",
+                CURRENCY,
+            ]
 
 
-@router.get("/expenses.csv")
-def export_expenses(
+@router.get("/ledger.csv")
+def export_ledger(
     start: date | None = None,
     end: date | None = None,
-    region: Region | None = None,
-    currency: str | None = None,
+    account_id: int | None = None,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    """Stream expenses as CSV. Optional `currency` adds a converted-amount column."""
+    """Stream the journal as CSV, one row per line."""
 
     def generate():
         buffer = io.StringIO()
         writer = csv.writer(buffer)
-        for row in _rows(db, user, start, end, region, TxDirection.OUTBOUND, currency):
+        for row in _rows(db, user, start, end, account_id):
             writer.writerow(row)
             yield buffer.getvalue()
             buffer.seek(0)
             buffer.truncate(0)
 
-    filename = f"expenses_{datetime.utcnow():%Y%m%d}.csv"
+    filename = f"ledger_{datetime.utcnow():%Y%m%d}.csv"
     return StreamingResponse(
         generate(),
         media_type="text/csv",
@@ -87,40 +103,52 @@ def export_expenses(
     )
 
 
-@router.get("/fx-rates.csv")
-def export_fx_rates(
-    base: str | None = None,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
+@router.get("/trial-balance.csv")
+def export_trial_balance(
+    user: User = Depends(current_user), db: Session = Depends(get_db)
 ) -> StreamingResponse:
-    """Stream the cached FX rate history as CSV — separate from expenses.csv
-    since it's a currency time series, not a ledger of transactions."""
-    ccy = (base or user.base_currency).upper()
+    """Stream a trial balance — every account's debit and credit totals.
+
+    The classic proof that a double-entry ledger is sound: the two columns
+    must sum to the same figure. Only possible now that the schema is
+    genuinely double-entry.
+    """
+    from app.services import balances as balances_svc
 
     def generate():
         buffer = io.StringIO()
         writer = csv.writer(buffer)
-        writer.writerow(["date", "base_currency", "quote_currency", "rate"])
+        writer.writerow(["code", "name", "type", "debits", "credits", "balance", "currency"])
         yield buffer.getvalue()
         buffer.seek(0)
         buffer.truncate(0)
-        # Executed lazily, once this generator is actually iterated during
-        # streaming — matching `_rows()` above. Executing the query eagerly
-        # (before returning the response) reads from a cursor after the
-        # request-scoped session has moved on, which SQLAlchemy rejects.
-        stmt = (
-            select(ExchangeRateHistory)
-            .where(ExchangeRateHistory.base_currency == ccy)
-            .order_by(ExchangeRateHistory.as_of, ExchangeRateHistory.quote_currency)
-        )
-        for r in db.execute(stmt).scalars():
-            rate = f"{Decimal(str(r.rate)):.6f}"
-            writer.writerow([r.as_of.isoformat(), r.base_currency, r.quote_currency, rate])
+
+        total_debits = Decimal("0")
+        total_credits = Decimal("0")
+        for row in balances_svc.account_balances(db, user.id, include_archived=True):
+            total_debits += row.debits
+            total_credits += row.credits
+            writer.writerow(
+                [
+                    row.code,
+                    row.name,
+                    row.type.value,
+                    f"{row.debits:.2f}",
+                    f"{row.credits:.2f}",
+                    f"{row.balance:.2f}",
+                    CURRENCY,
+                ]
+            )
             yield buffer.getvalue()
             buffer.seek(0)
             buffer.truncate(0)
 
-    filename = f"fx_rates_{ccy}_{datetime.utcnow():%Y%m%d}.csv"
+        writer.writerow(
+            ["", "TOTAL", "", f"{total_debits:.2f}", f"{total_credits:.2f}", "", CURRENCY]
+        )
+        yield buffer.getvalue()
+
+    filename = f"trial_balance_{datetime.utcnow():%Y%m%d}.csv"
     return StreamingResponse(
         generate(),
         media_type="text/csv",

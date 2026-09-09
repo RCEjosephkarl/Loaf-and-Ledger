@@ -18,22 +18,26 @@ class LineItem:
     key: str
     label: str
     amount: Decimal
-    # gross | tax | social | net | info (info = shown but not deducted, e.g. AU super)
+    # gross | tax | social | net | info (info = shown but not deducted)
     kind: str
 
-    def to_dict(self) -> dict:
+    def to_dict(self, period_factor: Decimal = Decimal("1")) -> dict:
         return {
             "key": self.key,
             "label": self.label,
             "amount": str(money(self.amount)),
+            # The same figure expressed in the profile's pay period. Carried in
+            # the snapshot so the ledger posting and the warehouse's
+            # fact_payslip_item never have to re-derive it.
+            "amount_period": str(money(Decimal(str(self.amount)) / period_factor)),
             "kind": self.kind,
         }
 
 
 @dataclass
 class Breakdown:
-    region: str
-    currency: str
+    """A gross-to-net computation. Single-currency (PHP) — see models.base."""
+
     tax_year: int
     pay_period: str
     gross_annual: Decimal
@@ -44,6 +48,10 @@ class Breakdown:
     items: list[LineItem] = field(default_factory=list)
 
     @property
+    def period_factor(self) -> Decimal:
+        return Decimal("12") if self.pay_period == "monthly" else Decimal("1")
+
+    @property
     def effective_rate(self) -> Decimal:
         if self.gross_annual == 0:
             return Decimal("0")
@@ -51,13 +59,11 @@ class Breakdown:
 
     def periodic(self, amount: Decimal) -> Decimal:
         """Scale an annual amount to the profile's pay period."""
-        factor = Decimal("12") if self.pay_period == "monthly" else Decimal("1")
-        return money(amount / factor)
+        return money(Decimal(str(amount)) / self.period_factor)
 
     def to_dict(self) -> dict:
+        factor = self.period_factor
         return {
-            "region": self.region,
-            "currency": self.currency,
             "tax_year": self.tax_year,
             "pay_period": self.pay_period,
             "gross_annual": str(money(self.gross_annual)),
@@ -68,5 +74,5 @@ class Breakdown:
             "total_social": str(money(self.total_social)),
             "total_deductions": str(money(self.total_deductions)),
             "effective_rate": str(self.effective_rate),
-            "items": [i.to_dict() for i in self.items],
+            "items": [i.to_dict(factor) for i in self.items],
         }

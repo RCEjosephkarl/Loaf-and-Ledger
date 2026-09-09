@@ -14,26 +14,65 @@ JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 # Two-decimal fixed money, returned as Decimal on every backend.
 Money = Numeric(14, 2, asdecimal=True)
 
-# Exchange rate: higher precision than money.
-Rate = Numeric(18, 8, asdecimal=True)
+# The app is single-currency (see README §2). Amounts carry no currency column;
+# this constant is the one place the code names the currency, leaving a seam for
+# reintroducing multi-currency as a deliberate feature rather than a default.
+CURRENCY = "PHP"
 
 
 class Base(DeclarativeBase):
     pass
 
 
-class Region(str, enum.Enum):
-    """Salary/tax region. EU is modelled at national level via Germany in v1."""
+class AccountType(str, enum.Enum):
+    """The five classical account types. `normal_balance` follows from this:
+    assets and expenses increase on the debit side, everything else on credit."""
 
-    PH = "PH"
-    US = "US"
-    AU = "AU"
-    EU = "EU"
+    ASSET = "asset"
+    LIABILITY = "liability"
+    EQUITY = "equity"
+    INCOME = "income"
+    EXPENSE = "expense"
 
 
-class TxDirection(str, enum.Enum):
-    INBOUND = "inbound"
-    OUTBOUND = "outbound"
+#: Account types whose balance increases with a debit.
+DEBIT_NORMAL = frozenset({AccountType.ASSET, AccountType.EXPENSE})
+
+
+def normal_balance(account_type: AccountType) -> str:
+    return "dr" if account_type in DEBIT_NORMAL else "cr"
+
+
+class FlowClass(str, enum.Enum):
+    """How an account participates in cash-flow analytics.
+
+    Income is money arriving, expense is money leaving; asset/liability/equity
+    accounts are stocks, not flows — a movement between two of them is a
+    transfer and must never be counted as earning or spending.
+    """
+
+    INFLOW = "inflow"
+    OUTFLOW = "outflow"
+    BALANCE = "balance"
+
+
+def flow_class(account_type: AccountType) -> FlowClass:
+    if account_type is AccountType.INCOME:
+        return FlowClass.INFLOW
+    if account_type is AccountType.EXPENSE:
+        return FlowClass.OUTFLOW
+    return FlowClass.BALANCE
+
+
+class EntrySource(str, enum.Enum):
+    """Where a journal entry came from — a dimension in the warehouse, and the
+    hook that makes payslip postings idempotent (see services/payslip.py)."""
+
+    MANUAL = "manual"
+    PAYSLIP = "payslip"
+    OPENING = "opening"
+    TRANSFER = "transfer"
+    IMPORT = "import"
 
 
 class BudgetScope(str, enum.Enum):
@@ -43,12 +82,3 @@ class BudgetScope(str, enum.Enum):
     QUARTER = "3m"
     YTD = "ytd"
     ALL = "all"
-
-
-# Canonical display currency per region (amounts are stored in native currency).
-REGION_CURRENCY: dict[Region, str] = {
-    Region.PH: "PHP",
-    Region.US: "USD",
-    Region.AU: "AUD",
-    Region.EU: "EUR",
-}

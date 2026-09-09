@@ -10,8 +10,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # SQLite by default so the app runs with zero setup; Postgres in production.
+    # --- OLTP: the system of record. SQLite by default so the app runs with
+    # zero setup; Postgres in production. Normalized, write-optimized.
     database_url: str = "sqlite:///./loaf_ledger.db"
+
+    # --- OLAP: a physically separate DuckDB file holding the star schema.
+    # Columnar and read-optimized; rebuilt from the OLTP database at any time
+    # (see app/warehouse/), so it is derived data and safe to delete.
+    warehouse_path: str = "./warehouse.duckdb"
+
     frontend_origin: str = "http://localhost:5173"
 
     # Local single-user deployment: no multi-user auth. An optional app password

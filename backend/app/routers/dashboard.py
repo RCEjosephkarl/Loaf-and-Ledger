@@ -1,55 +1,70 @@
-"""F6 — dashboard summary honoring global filters (time range, currency, region)."""
+"""F6 — dashboard summary honoring the global time-range filter."""
 
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import current_user
-from app.models.base import Region
+from app.models.base import CURRENCY, AccountType
 from app.models.user import User
-from app.schemas import CategoryTotal, DashboardSummary, Insight
-from app.services import analytics as svc
-from app.services.currency import convert
+from app.routers.analytics import salary_reference
+from app.schemas import AccountTotal, DashboardSummary, Insight
+from app.services import balances as balances_svc
+from app.services import insights as insights_svc
+from app.tax.models import money
+from app.warehouse import queries as wq
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 @router.get("/summary", response_model=DashboardSummary)
 def summary(
-    currency: str | None = None,
     start: date | None = None,
     end: date | None = None,
-    region: Region | None = None,
+    account_id: int | None = None,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    ccy = (currency or user.base_currency).upper()
-    agg = svc.aggregate(db, user.id, currency=ccy, start=start, end=end, region=region)
+    totals = wq.totals(start, end, account_id)
+    accounts = wq.by_account(start, end, account_id)
+    net_period, _ = salary_reference(db, user.id)
 
-    salary = svc.active_salary(db, user.id)
-    salary_net_period = None
-    if salary is not None:
-        net_period = Decimal(str(salary.breakdown.get("net_period", "0")))
-        salary_net_period = convert(db, net_period, salary.currency, ccy)
+    expenses = [a for a in accounts if a["flow_class"] == "outflow"]
+    top = sorted(expenses, key=lambda a: a["total"], reverse=True)[:5]
 
-    reference = salary_net_period if salary_net_period else agg["total_income"]
-    insights = svc.generate_insights(
-        db, user.id, currency=ccy, agg=agg, salary_net_period=salary_net_period
+    # Net worth comes from the OLTP balances rather than the warehouse: it is a
+    # point-in-time stock, not a windowed flow, and the journal is its source.
+    rows = balances_svc.account_balances(db, user.id)
+    assets = sum(
+        (r.balance for r in rows if r.type is AccountType.ASSET), start=money("0")
+    )
+    liabilities = sum(
+        (r.balance for r in rows if r.type is AccountType.LIABILITY), start=money("0")
     )
 
     return DashboardSummary(
-        currency=ccy,
-        region=region,
-        total_income=agg["total_income"],
-        total_expense=agg["total_expense"],
-        net_cashflow=agg["net_cashflow"],
-        salary_net_period=salary_net_period,
-        savings_rate=svc.savings_rate(reference, agg["total_expense"]),
-        top_expense_categories=[CategoryTotal(**c) for c in svc.top_expense_categories(agg)],
-        insights=[Insight(**i) for i in insights],
+        currency=CURRENCY,
+        total_income=totals["total_income"],
+        total_expense=totals["total_expense"],
+        net_cashflow=totals["net_cashflow"],
+        transfer_volume=totals["transfer_volume"],
+        salary_net_period=net_period,
+        savings_rate=insights_svc.savings_rate(
+            totals["total_income"], totals["total_expense"]
+        ),
+        net_worth=money(assets - liabilities),
+        top_expense_accounts=[AccountTotal(**a) for a in top],
+        insights=[
+            Insight(**i)
+            for i in insights_svc.generate(
+                totals=totals,
+                accounts=accounts,
+                salary_net_period=net_period,
+                transfer_volume=totals["transfer_volume"],
+            )
+        ],
     )
