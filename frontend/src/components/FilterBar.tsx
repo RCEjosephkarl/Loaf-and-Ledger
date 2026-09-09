@@ -1,15 +1,31 @@
-import { CURRENCIES } from "@/lib/format";
+import { ACCOUNT_TYPE_LABEL } from "@/lib/format";
 import { TIME_RANGES, useFilters } from "@/store/filters";
-import { useRegions } from "@/api/queries";
+import { useAccounts } from "@/api/queries";
 
+/**
+ * Global filters. Currency and region are gone — the app is single-currency
+ * (PHP) and single-jurisdiction (PH). Account took their place: with a
+ * double-entry chart of accounts, "show me only what touched the GCash wallet"
+ * is the slice worth having.
+ */
 export function FilterBar() {
-  const { region, currency, timeRange, theme, setRegion, setCurrency, setTimeRange, setTheme } =
-    useFilters();
-  const { data: regions } = useRegions();
+  const { accountId, timeRange, theme, setAccountId, setTimeRange, setTheme } = useFilters();
+  const { data: accounts } = useAccounts();
 
   const cycleTheme = () =>
     setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light");
   const themeIcon = theme === "light" ? "☀" : theme === "dark" ? "☾" : "◑";
+
+  // Only balance-sheet accounts make sense as a filter: filtering to an
+  // expense account would hide the very entries that fund it.
+  const selectable = (accounts ?? []).filter(
+    (a) => a.type === "asset" || a.type === "liability",
+  );
+  const grouped = ["asset", "liability"].map((type) => ({
+    type,
+    label: ACCOUNT_TYPE_LABEL[type],
+    items: selectable.filter((a) => a.type === type),
+  }));
 
   return (
     <div className="filterbar">
@@ -19,6 +35,7 @@ export function FilterBar() {
             key={r.value}
             className={`seg ${timeRange === r.value ? "seg--on" : ""}`}
             onClick={() => setTimeRange(r.value)}
+            aria-pressed={timeRange === r.value}
           >
             {r.label}
           </button>
@@ -27,25 +44,23 @@ export function FilterBar() {
 
       <div className="filterbar__controls">
         <label className="inline-field">
-          <span className="eyebrow">Region</span>
-          <select value={region} onChange={(e) => setRegion(e.target.value as never)}>
-            <option value="">All</option>
-            {regions?.map((r) => (
-              <option key={r.region} value={r.region}>
-                {r.region}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="inline-field">
-          <span className="eyebrow">Currency</span>
-          <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-            {CURRENCIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
+          <span className="eyebrow">Account</span>
+          <select
+            value={accountId ?? ""}
+            onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">All accounts</option>
+            {grouped.map((g) =>
+              g.items.length ? (
+                <optgroup key={g.type} label={g.label}>
+                  {g.items.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.code} · {a.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null,
+            )}
           </select>
         </label>
 

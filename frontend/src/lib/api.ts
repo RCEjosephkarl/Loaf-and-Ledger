@@ -46,10 +46,13 @@ export const api = {
     fetch(`${BASE}${path}${qs(params)}`, { method: "DELETE" }).then((r) => handle<void>(r)),
 };
 
-export function exportUrl(params?: Params): string {
-  return `${BASE}/export/expenses.csv${qs(params)}`;
+/** One row per journal line — the granularity that keeps a double-entry
+ * ledger reconstructable from the CSV alone. */
+export function exportLedgerUrl(params?: Params): string {
+  return `${BASE}/export/ledger.csv${qs(params)}`;
 }
 
-export function exportFxUrl(params?: Params): string {
-  return `${BASE}/export/fx-rates.csv${qs(params)}`;
+/** Every account's debit and credit totals; the two columns must tie. */
+export function exportTrialBalanceUrl(): string {
+  return `${BASE}/export/trial-balance.csv`;
 }

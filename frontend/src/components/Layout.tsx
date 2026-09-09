@@ -8,9 +8,10 @@ import "@/components/layout.css";
 const NAV = [
   { to: "/", label: "Dashboard", end: true, hint: "01" },
   { to: "/salary", label: "Salary", hint: "02" },
-  { to: "/ledger", label: "Ledger", hint: "03" },
-  { to: "/budgets", label: "Budgets", hint: "04" },
-  { to: "/analytics", label: "Analytics", hint: "05" },
+  { to: "/accounts", label: "Accounts", hint: "03" },
+  { to: "/ledger", label: "Ledger", hint: "04" },
+  { to: "/budgets", label: "Budgets", hint: "05" },
+  { to: "/analytics", label: "Analytics", hint: "06" },
 ];
 
 function useTheme() {
@@ -42,7 +43,7 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="sidebar__foot eyebrow">v0.0.0 · local</div>
+        <div className="sidebar__foot eyebrow">v0.1.0 · PHP · local</div>
       </aside>
 
       <div className="main">

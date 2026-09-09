@@ -1,14 +1,14 @@
 import { money } from "@/lib/format";
 
+/** A monetary figure in the ledger's monospace tabular style, optionally
+ * tinted by which side of the books it sits on. */
 export function Money({
   value,
-  currency,
-  sign = "plain",
+  sign,
 }: {
   value: string | number;
-  currency: string;
-  sign?: "credit" | "debit" | "plain";
+  sign?: "credit" | "debit";
 }) {
-  const cls = sign === "credit" ? "fig fig--credit" : sign === "debit" ? "fig fig--debit" : "fig";
-  return <span className={cls}>{money(value, currency)}</span>;
+  const cls = sign ? `fig fig--${sign}` : "fig";
+  return <span className={cls}>{money(value)}</span>;
 }

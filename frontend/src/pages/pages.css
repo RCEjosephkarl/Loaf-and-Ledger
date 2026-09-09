@@ -120,3 +120,285 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================================
+   Double-entry additions — accounts, journal grid, and the
+   Analytics four-act narrative.
+   ============================================================ */
+
+/* --- shared bits ------------------------------------------------------- */
+
+.card__blurb { margin: 0 0 14px; font-size: 13px; line-height: 1.55; }
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.form-row .field { flex: 0 1 170px; }
+.form-row .field--wide { flex: 1 1 240px; }
+.form-row .field--code { flex: 0 0 90px; }
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field .eyebrow { line-height: 1; }
+
+.btn--sm { padding: 2px 8px; font-size: 13px; line-height: 1.4; }
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.btn--ghost:hover { color: var(--debit); border-color: var(--rule); }
+
+.pill--sm {
+  margin-left: 6px;
+  padding: 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
+.linkish {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  border-bottom: 1px dotted var(--rule-strong);
+}
+.linkish:hover { border-bottom-color: var(--crust); color: var(--crust); }
+
+.callout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--muted);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  font-size: 13px;
+}
+.callout--good { border-left-color: var(--good); }
+.callout--warn { border-left-color: var(--warn); }
+
+.col-code { color: var(--muted); font-size: 12px; }
+.col-date { white-space: nowrap; }
+.col-time { font-size: 11px; }
+.col-side { width: 110px; }
+.col-util { width: 170px; }
+
+/* --- ledger: quick entry + journal grid --------------------------------- */
+
+.kind-toggle { margin-bottom: 16px; }
+
+.entry-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-items: end;
+  gap: 12px;
+}
+.entry-form .field--wide { grid-column: 1 / -1; }
+.entry-form > .btn { align-self: end; height: 34px; }
+
+.disclosure {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 18px;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.disclosure:hover { color: var(--crust); }
+.disclosure .eyebrow { margin-left: auto; }
+
+.journal-grid input,
+.journal-grid select { width: 100%; }
+.journal-grid input.num { text-align: right; font-family: var(--font-mono); }
+
+.journal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+/* The balance invariant, made visible: the submit button stays disabled
+   until the two columns agree, so an unbalanced entry is unpostable
+   rather than merely rejected. */
+.balance-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 5px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--muted);
+}
+.balance-meter__sep { opacity: 0.5; }
+.balance-meter__verdict { color: var(--debit); font-weight: 500; }
+.balance-meter--ok { border-color: color-mix(in srgb, var(--good) 45%, var(--rule)); }
+.balance-meter--ok .balance-meter__verdict { color: var(--good); }
+
+.ledger--nested { margin: 4px 0 10px; background: var(--surface); }
+.ledger--nested td { padding-top: 4px; padding-bottom: 4px; font-size: 13px; }
+.row--lines > td { padding: 0 0 0 12px; border-bottom: 1px solid var(--rule); }
+.row--voided { opacity: 0.45; text-decoration: line-through; }
+.entry-sub { font-size: 12px; margin-top: 2px; }
+
+/* --- budgets: utilization bars ----------------------------------------- */
+
+.util { display: flex; align-items: center; gap: 8px; }
+.util__track {
+  position: relative;
+  flex: 1;
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--green-bar);
+  overflow: hidden;
+}
+.util__fill { height: 100%; border-radius: 4px; background: var(--credit); }
+.util__fill--over { background: var(--warn); }
+.util__over { height: 100%; background: var(--debit); }
+.util__pct { font-size: 12px; min-width: 38px; text-align: right; }
+
+/* --- analytics: the four-act narrative --------------------------------- */
+
+.analytics__layout {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.act-nav {
+  position: sticky;
+  top: 88px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 2px;
+  border-left: 1px solid var(--rule);
+}
+.act-nav__item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 12px;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.act-nav__item:hover { color: var(--ink-soft); }
+.act-nav__item--on {
+  color: var(--ink);
+  border-left-color: var(--crust);
+  font-weight: 500;
+}
+.act-nav__numeral {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--crust);
+  min-width: 16px;
+}
+
+.analytics__acts { display: flex; flex-direction: column; gap: 56px; }
+
+.act { scroll-margin-top: 88px; }
+.act__head {
+  display: flex;
+  gap: 18px;
+  align-items: baseline;
+  padding-bottom: 18px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--rule);
+}
+.act__numeral {
+  font-family: var(--font-display);
+  font-size: 40px;
+  line-height: 1;
+  color: var(--crust);
+  opacity: 0.55;
+}
+.act__title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+/* The lede is the argument; it gets reading-column width and the
+   numbers inside it get the display serif so they carry weight. */
+.act__lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+.lede-fig {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.lede-fig--credit { color: var(--credit); }
+.lede-fig--debit { color: var(--debit); }
+
+.act__body { display: flex; flex-direction: column; gap: 20px; }
+
+/* Ranked horizontal bars — length beats angle for magnitude, so this
+   replaces what would otherwise be a pie. */
+.ranked__barcol { width: 46%; }
+.ranked td.ranked__barcol { display: flex; align-items: center; gap: 10px; }
+.ranked__track {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--green-bar);
+  overflow: hidden;
+}
+.ranked__fill { height: 100%; border-radius: 4px; background: var(--crust); }
+.ranked__fill--statutory { background: var(--muted); }
+.ranked__pct { font-size: 12px; min-width: 34px; text-align: right; }
+
+.stat-grid--tight { gap: 12px; margin: 14px 0 18px; }
+.stat-grid--tight .stat { padding: 0; }
+
+.post-payslip { display: flex; flex-direction: column; gap: 10px; }
+
+@media (max-width: 900px) {
+  .analytics__layout { grid-template-columns: 1fr; gap: 20px; }
+  .act-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-left: 0;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 8px;
+  }
+  .act-nav__item { border-left: 0; border-bottom: 2px solid transparent; }
+  .act-nav__item--on { border-left: 0; border-bottom-color: var(--crust); }
+  .ranked__barcol { display: none; }
+  .col-util { width: auto; }
+}

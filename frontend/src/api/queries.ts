@@ -1,31 +1,33 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { localISODate } from "@/lib/format";
 import { previousRangeBounds, rangeBounds, useFilters, type TimeRange } from "@/store/filters";
 import type {
+  Account,
+  AccountBalances,
+  AccountType,
   AnalyticsOverview,
   Breakdown,
   Budget,
   BudgetScope,
   BudgetStatus,
-  Category,
   DashboardSummary,
-  Direction,
+  EarningsResponse,
+  EntryKind,
+  EntrySource,
   FundStatus,
-  FxRatesResponse,
-  MonthlyByCategoryResponse,
+  JournalEntry,
+  JournalLineInput,
+  Meta,
+  MonthlyByAccountResponse,
   MonthlyPoint,
+  Payee,
   PayPeriod,
-  Region,
-  RegionInfo,
   RunningBalanceResponse,
   SalaryProfile,
-  Transaction,
-  TransactionBalancesResponse,
-  TransactionUpdate,
+  WarehouseStatus,
 } from "@/lib/types";
 
-/** Map the global/page time-range vocabulary to the backend's BudgetScope
+/** Map the global time-range vocabulary to the backend's BudgetScope
  * vocabulary ("this_month" -> "month", "last_3m" -> "3m"; ytd/all match). */
 export function toBudgetScope(range: TimeRange): BudgetScope {
   if (range === "this_month") return "month";
@@ -33,21 +35,158 @@ export function toBudgetScope(range: TimeRange): BudgetScope {
   return range;
 }
 
-/** Global filter params (F6) shared by dashboard/analytics/ledger reads. */
+/** Global filter params shared by dashboard/analytics/ledger reads. */
 export function useGlobalParams() {
-  const { region, currency, timeRange } = useFilters();
+  const { accountId, timeRange } = useFilters();
   const { start, end } = rangeBounds(timeRange);
   return {
-    currency,
-    region: region || undefined,
+    account_id: accountId ?? undefined,
     start: start || undefined,
     end: end || undefined,
   };
 }
 
 // ---- meta ----
-export const useRegions = () =>
-  useQuery({ queryKey: ["regions"], queryFn: () => api.get<RegionInfo[]>("/regions") });
+export const useMeta = () =>
+  useQuery({ queryKey: ["meta"], queryFn: () => api.get<Meta>("/meta"), staleTime: Infinity });
+
+// ---- accounts ----
+export const useAccounts = (opts?: { includeArchived?: boolean; type?: AccountType }) =>
+  useQuery({
+    queryKey: ["accounts", "list", opts?.includeArchived ?? false, opts?.type ?? "all"],
+    queryFn: () =>
+      api.get<Account[]>("/accounts", {
+        include_archived: opts?.includeArchived,
+        type: opts?.type,
+      }),
+  });
+
+export const useAccountBalances = () =>
+  useQuery({
+    queryKey: ["accounts", "balances"],
+    queryFn: () => api.get<AccountBalances>("/accounts/balances"),
+  });
+
+export const useCreateAccount = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      code: string;
+      name: string;
+      type: AccountType;
+      subtype?: string;
+      opening_balance?: string;
+    }) => api.post<Account>("/accounts", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
+  });
+};
+
+export const useUpdateAccount = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: number; name?: string; subtype?: string; is_active?: boolean }) =>
+      api.patch<Account>(`/accounts/${id}`, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
+  });
+};
+
+export const useArchiveAccount = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.del(`/accounts/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
+  });
+};
+
+export const usePayees = () =>
+  useQuery({ queryKey: ["payees"], queryFn: () => api.get<Payee[]>("/payees") });
+
+export const useCreatePayee = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; default_account_id?: number }) =>
+      api.post<Payee>("/payees", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["payees"] }),
+  });
+};
+
+// ---- ledger (journal) ----
+
+/** Every write invalidates both stores' readers: the OLTP-backed lists and the
+ * OLAP-backed analytics, which the server has already kept in step. */
+const LEDGER_KEYS = [["entries"], ["accounts"], ["dashboard"], ["analytics"], ["budgets"], ["warehouse"]];
+
+function useLedgerMutation<TInput, TResult>(fn: (input: TInput) => Promise<TResult>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => LEDGER_KEYS.forEach((queryKey) => qc.invalidateQueries({ queryKey })),
+  });
+}
+
+export const useEntries = (opts?: { source?: EntrySource; includeVoided?: boolean }) => {
+  const p = useGlobalParams();
+  const params = { ...p, source: opts?.source, include_voided: opts?.includeVoided };
+  return useQuery({
+    queryKey: ["entries", params],
+    queryFn: () => api.get<JournalEntry[]>("/ledger/entries", params),
+  });
+};
+
+/** Every entry ever recorded, ignoring the global range — the Ledger page's
+ * running-balance column has to span the whole history to mean anything. */
+export const useAllEntries = () => {
+  const accountId = useFilters((s) => s.accountId);
+  return useQuery({
+    queryKey: ["entries", "all", accountId],
+    queryFn: () =>
+      api.get<JournalEntry[]>("/ledger/entries", {
+        account_id: accountId ?? undefined,
+        limit: 2000,
+      }),
+  });
+};
+
+export interface SimpleEntryInput {
+  kind: EntryKind;
+  amount: string;
+  account_id: number;
+  counter_account_id: number;
+  occurred_at: string;
+  memo?: string;
+  payee_id?: number;
+}
+
+export const useCreateSimpleEntry = () =>
+  useLedgerMutation((input: SimpleEntryInput) =>
+    api.post<JournalEntry>("/ledger/entries/simple", input),
+  );
+
+export const useCreateEntry = () =>
+  useLedgerMutation(
+    (input: {
+      occurred_at: string;
+      lines: JournalLineInput[];
+      memo?: string;
+      payee_id?: number;
+    }) => api.post<JournalEntry>("/ledger/entries", input),
+  );
+
+export const useUpdateEntry = () =>
+  useLedgerMutation(
+    ({
+      id,
+      ...patch
+    }: {
+      id: number;
+      occurred_at?: string;
+      lines?: JournalLineInput[];
+      memo?: string;
+    }) => api.patch<JournalEntry>(`/ledger/entries/${id}`, patch),
+  );
+
+export const useVoidEntry = () =>
+  useLedgerMutation((id: number) => api.del(`/ledger/entries/${id}`));
 
 // ---- F1 salary ----
 export const useActiveSalary = () =>
@@ -63,7 +202,6 @@ export const useSalaryProfiles = () =>
   });
 
 export interface CalcInput {
-  region: Region;
   gross_amount: string;
   pay_period: PayPeriod;
 }
@@ -86,105 +224,27 @@ export const useSaveProfile = () => {
   });
 };
 
-export const useActivateProfile = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => api.post<SalaryProfile>(`/salary/profiles/${id}/activate`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["salary"] }),
-  });
-};
-
 export const useDeleteProfile = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.del(`/salary/profiles/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["salary"] }),
-  });
-};
-
-// ---- F2 ledger ----
-export const useCategories = (direction?: Direction) =>
-  useQuery({
-    queryKey: ["categories", direction ?? "all"],
-    queryFn: () => api.get<Category[]>("/ledger/categories", { direction }),
-  });
-
-export const useTransactions = (direction?: Direction) => {
-  const p = useGlobalParams();
-  const params = { ...p, direction };
-  return useQuery({
-    queryKey: ["transactions", params],
-    queryFn: () => api.get<Transaction[]>("/ledger/transactions", params),
-  });
-};
-
-/** Full-history cumulative balance per transaction, keyed by id — feeds the
- * Ledger table's running-balance column. Always spans the user's whole
- * history regardless of the global time-range filter (see useGlobalBalance
- * for the equivalent single-figure card). */
-export const useTransactionBalances = () => {
-  const { region, currency } = useFilters();
-  return useQuery({
-    queryKey: ["transactions", "balances", region, currency],
-    queryFn: () =>
-      api.get<TransactionBalancesResponse>("/ledger/transactions/balances", {
-        region: region || undefined,
-        currency,
-      }),
-  });
-};
-
-export interface TxInput {
-  direction: Direction;
-  category_id: number;
-  amount: string;
-  currency?: string;
-  region?: Region;
-  occurred_on: string;
-  occurred_time?: string;
-  description?: string;
-}
-
-export const useCreateTransaction = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: TxInput) => api.post<Transaction>("/ledger/transactions", input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["analytics"] });
-      qc.invalidateQueries({ queryKey: ["budgets"] });
-    },
-  });
-};
-
-export const useUpdateTransaction = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...patch }: { id: number } & TransactionUpdate) =>
-      api.patch<Transaction>(`/ledger/transactions/${id}`, patch),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["analytics"] });
-      qc.invalidateQueries({ queryKey: ["budgets"] });
-    },
-  });
-};
-
-export const useDeleteTransaction = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => api.del(`/ledger/transactions/${id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["salary"] });
       qc.invalidateQueries({ queryKey: ["analytics"] });
     },
   });
 };
 
-// ---- F3 analytics / F6 dashboard ----
+/** Post a saved payslip to the ledger as one balanced multi-line entry. */
+export const usePostPayslip = () =>
+  useLedgerMutation((input: { id: number; deposit_account_id: number; occurred_at?: string }) =>
+    api.post<{ entry: JournalEntry; created: boolean }>(`/salary/profiles/${input.id}/post`, {
+      deposit_account_id: input.deposit_account_id,
+      occurred_at: input.occurred_at,
+    }),
+  );
+
+// ---- F3 analytics / F6 dashboard (all served from the warehouse) ----
 export const useDashboard = () => {
   const p = useGlobalParams();
   return useQuery({
@@ -201,9 +261,25 @@ export const useAnalyticsOverview = () => {
   });
 };
 
-/** How many trailing months the monthly bar/combo chart should request for
- * each global time-range preset — keeps the chart's span aligned with the
- * selected scope instead of always showing a hardcoded 6 months. */
+/** The same endpoint over the immediately prior period of equal length —
+ * powers every "Δ vs prior" comparison. */
+export const usePreviousAnalyticsOverview = () => {
+  const { accountId, timeRange } = useFilters();
+  const prev = previousRangeBounds(timeRange);
+  return useQuery({
+    queryKey: ["analytics", "overview", "previous", accountId, timeRange],
+    queryFn: () =>
+      api.get<AnalyticsOverview>("/analytics/overview", {
+        account_id: accountId ?? undefined,
+        start: prev?.start,
+        end: prev?.end,
+      }),
+    enabled: !!prev,
+  });
+};
+
+/** How many trailing months the monthly charts should request for each preset,
+ * so the chart's span tracks the selected scope instead of a fixed 6. */
 export function monthsForRange(range: TimeRange): number {
   switch (range) {
     case "this_month":
@@ -213,92 +289,45 @@ export function monthsForRange(range: TimeRange): number {
     case "ytd":
       return new Date().getMonth() + 1; // Jan..current month
     case "all":
-      return 36; // backend's own Query(..., le=36) ceiling
+      return 36; // the backend's own Query(..., le=36) ceiling
   }
 }
 
 export const useMonthly = () => {
-  const { currency, region, timeRange } = useFilters();
+  const timeRange = useFilters((s) => s.timeRange);
   const months = monthsForRange(timeRange);
   return useQuery({
-    queryKey: ["analytics", "monthly", currency, region, months],
+    queryKey: ["analytics", "monthly", months],
     queryFn: () =>
-      api.get<{ currency: string; series: MonthlyPoint[] }>("/analytics/monthly", {
-        currency,
-        region: region || undefined,
-        months,
-      }),
+      api.get<{ currency: string; series: MonthlyPoint[] }>("/analytics/monthly", { months }),
   });
 };
 
-export const useMonthlyByCategory = (months: number) => {
-  const { currency, region } = useFilters();
-  return useQuery({
-    queryKey: ["analytics", "monthly-by-category", currency, region, months],
+export const useMonthlyByAccount = (months: number, flow: "inflow" | "outflow" = "outflow") =>
+  useQuery({
+    queryKey: ["analytics", "monthly-by-account", months, flow],
     queryFn: () =>
-      api.get<MonthlyByCategoryResponse>("/analytics/monthly-by-category", {
-        currency,
-        region: region || undefined,
-        months,
-      }),
+      api.get<MonthlyByAccountResponse>("/analytics/monthly-by-account", { months, flow }),
   });
-};
 
-/** Cumulative daily net cash flow. Defaults to the global time-range filter;
- * pass an explicit `{start,end}` override so a page (e.g. Budgets) can drive
- * this from its own local period instead of the global one. */
+/** Cumulative daily net cash flow. Defaults to the global range; pass an
+ * explicit `{start,end}` so a page can drive it from its own period. */
 export const useRunningBalance = (override?: { start?: string | null; end?: string | null }) => {
-  const { region, currency, timeRange } = useFilters();
+  const timeRange = useFilters((s) => s.timeRange);
   const { start, end } = override ?? rangeBounds(timeRange);
-  const params = { currency, region: region || undefined, start: start || undefined, end: end || undefined };
+  const params = { start: start || undefined, end: end || undefined };
   return useQuery({
     queryKey: ["analytics", "running-balance", params],
     queryFn: () => api.get<RunningBalanceResponse>("/analytics/running-balance", params),
   });
 };
 
-/** Same `/analytics/overview` endpoint, re-queried over the immediately prior
- * period of equal length — powers the "Δ vs prior period" comparison. */
-export const usePreviousAnalyticsOverview = () => {
-  const { region, currency, timeRange } = useFilters();
-  const prev = previousRangeBounds(timeRange);
-  return useQuery({
-    queryKey: ["analytics", "overview", "previous", region, currency, timeRange],
-    queryFn: () =>
-      api.get<AnalyticsOverview>("/analytics/overview", {
-        currency,
-        region: region || undefined,
-        start: prev?.start,
-        end: prev?.end,
-      }),
-    enabled: !!prev,
+/** The gross-to-net waterfall, read from fact_payslip_item. */
+export const useEarnings = (profileId?: number) =>
+  useQuery({
+    queryKey: ["analytics", "earnings", profileId ?? "active"],
+    queryFn: () => api.get<EarningsResponse>("/analytics/earnings", { profile_id: profileId }),
   });
-};
-
-// ---- FX live rates (Dashboard) ----
-
-/** `rangeBounds("all")` returns nulls, which on `/fx/rates` means "give the
- * legacy 7-day default" — not what "All" should mean for this chart. Map it
- * to an explicit 365-day lookback instead; every other preset passes through. */
-function fxRangeBounds(range: TimeRange): { start: string | null; end: string | null } {
-  if (range === "all") {
-    const end = new Date();
-    const start = new Date(end);
-    start.setDate(start.getDate() - 365);
-    return { start: localISODate(start), end: localISODate(end) };
-  }
-  return rangeBounds(range);
-}
-
-export const useFxRates = () => {
-  const { currency, timeRange } = useFilters();
-  const { start, end } = fxRangeBounds(timeRange);
-  return useQuery({
-    queryKey: ["fx", "rates", currency, start, end],
-    queryFn: () => api.get<FxRatesResponse>("/fx/rates", { base: currency, start, end }),
-    staleTime: 60 * 60 * 1000, // daily close rates — no need to refetch often
-  });
-};
 
 // ---- F4 budgets ----
 export const useBudgets = () =>
@@ -310,18 +339,16 @@ export const useBudgetStatus = (scope: BudgetScope, anchor?: string) =>
     queryFn: () => api.get<BudgetStatus[]>("/budgets/status", { scope, anchor }),
   });
 
-export const useBudgetFund = (scope: BudgetScope, anchor?: string) => {
-  const currency = useFilters((s) => s.currency);
-  return useQuery({
-    queryKey: ["budgets", "fund", scope, anchor, currency],
-    queryFn: () => api.get<FundStatus>("/budgets/fund", { scope, anchor, currency }),
+export const useBudgetFund = (scope: BudgetScope, anchor?: string) =>
+  useQuery({
+    queryKey: ["budgets", "fund", scope, anchor],
+    queryFn: () => api.get<FundStatus>("/budgets/fund", { scope, anchor }),
   });
-};
 
 export const useSetBudgetFund = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { scope: BudgetScope; anchor?: string; amount: string; currency?: string }) =>
+    mutationFn: (input: { scope: BudgetScope; anchor?: string; amount: string }) =>
       api.post<FundStatus>("/budgets/fund", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets", "fund"] }),
   });
@@ -330,8 +357,7 @@ export const useSetBudgetFund = () => {
 export const useResetBudgetFund = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { scope: BudgetScope; anchor?: string }) =>
-      api.del("/budgets/fund", input),
+    mutationFn: (input: { scope: BudgetScope; anchor?: string }) => api.del("/budgets/fund", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets", "fund"] }),
   });
 };
@@ -340,11 +366,10 @@ export const useUpsertBudget = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: {
-      category_id: number;
+      account_id: number;
       year: number;
       month: number;
       limit_amount: string;
-      currency?: string;
     }) => api.post<Budget>("/budgets", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
   });
@@ -355,5 +380,28 @@ export const useDeleteBudget = () => {
   return useMutation({
     mutationFn: (id: number) => api.del(`/budgets/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
+  });
+};
+
+// ---- warehouse ----
+
+/** Drift between the two stores. Polled gently: write-through keeps them in
+ * step, so this is a safety net, not a status the user watches. */
+export const useWarehouseStatus = () =>
+  useQuery({
+    queryKey: ["warehouse", "status"],
+    queryFn: () => api.get<WarehouseStatus>("/warehouse/status"),
+    staleTime: 30_000,
+  });
+
+export const useRebuildWarehouse = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ counts: Record<string, number> }>("/warehouse/rebuild"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["warehouse"] });
+      qc.invalidateQueries({ queryKey: ["analytics"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 };
