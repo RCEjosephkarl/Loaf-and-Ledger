@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,11 @@ from app.services import insights as insights_svc
 from app.warehouse import queries as wq
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+def validate_range(start: date | None, end: date | None) -> None:
+    if start and end and start > end:
+        raise HTTPException(422, "start must be on or before end")
 
 
 def active_salary(db: Session, user_id: int) -> SalaryProfile | None:
@@ -65,6 +70,7 @@ def overview(
     db: Session = Depends(get_db),
 ):
     """Income/expense totals plus the per-account breakdown behind them."""
+    validate_range(start, end)
     totals = wq.totals(start, end, account_id)
     accounts = wq.by_account(start, end, account_id)
     net_period, deduction_rate = salary_reference(db, user.id)
@@ -77,32 +83,39 @@ def overview(
         transfer_volume=totals["transfer_volume"],
         salary_net_period=net_period,
         salary_deduction_rate=deduction_rate,
-        savings_rate=insights_svc.savings_rate(
-            totals["total_income"], totals["total_expense"]
-        ),
+        savings_rate=insights_svc.savings_rate(totals["total_income"], totals["total_expense"]),
         accounts=[AccountTotal(**a) for a in accounts],
     )
 
 
 @router.get("/monthly", response_model=MonthlyResponse)
-def monthly(months: int = Query(6, ge=1, le=36)):
-    """Monthly income vs expense, straight off the monthly rollup."""
-    return MonthlyResponse(currency=CURRENCY, series=wq.monthly(months))
+def monthly(
+    months: int | None = Query(None, ge=1, le=36),
+    start: date | None = None,
+    end: date | None = None,
+):
+    """Monthly income vs expense over inclusive calendar dates."""
+    validate_range(start, end)
+    return MonthlyResponse(currency=CURRENCY, series=wq.monthly(months, start=start, end=end))
 
 
 @router.get("/monthly-by-account", response_model=MonthlyByAccountResponse)
 def monthly_by_account(
-    months: int = Query(6, ge=1, le=36),
+    months: int | None = Query(None, ge=1, le=36),
     flow: str = Query("outflow", pattern="^(inflow|outflow)$"),
+    start: date | None = None,
+    end: date | None = None,
 ):
-    """Trailing-N-month totals per account — feeds the stacked mix chart."""
-    result = wq.monthly_by_account(months, flow)
+    """Calendar-month totals per account — feeds the stacked mix chart."""
+    validate_range(start, end)
+    result = wq.monthly_by_account(months, flow, start=start, end=end)
     return MonthlyByAccountResponse(currency=CURRENCY, **result)
 
 
 @router.get("/running-balance", response_model=RunningBalanceResponse)
 def running_balance(start: date | None = None, end: date | None = None):
     """Daily in/out with a cumulative balance across the range."""
+    validate_range(start, end)
     return RunningBalanceResponse(currency=CURRENCY, points=wq.running_balance(start, end))
 
 

@@ -1,10 +1,10 @@
-"""F6 — dashboard summary honoring the global time-range filter."""
+"""F6 — dashboard summary honoring explicit section date bounds."""
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -29,6 +29,8 @@ def summary(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
+    if start and end and start > end:
+        raise HTTPException(422, "start must be on or before end")
     totals = wq.totals(start, end, account_id)
     accounts = wq.by_account(start, end, account_id)
     net_period, _ = salary_reference(db, user.id)
@@ -38,10 +40,10 @@ def summary(
 
     # Net worth comes from the OLTP balances rather than the warehouse: it is a
     # point-in-time stock, not a windowed flow, and the journal is its source.
-    rows = balances_svc.account_balances(db, user.id)
-    assets = sum(
-        (r.balance for r in rows if r.type is AccountType.ASSET), start=money("0")
+    rows = balances_svc.account_balances(
+        db, user.id, as_of=datetime.combine(end, time.max) if end else None
     )
+    assets = sum((r.balance for r in rows if r.type is AccountType.ASSET), start=money("0"))
     liabilities = sum(
         (r.balance for r in rows if r.type is AccountType.LIABILITY), start=money("0")
     )
@@ -53,9 +55,7 @@ def summary(
         net_cashflow=totals["net_cashflow"],
         transfer_volume=totals["transfer_volume"],
         salary_net_period=net_period,
-        savings_rate=insights_svc.savings_rate(
-            totals["total_income"], totals["total_expense"]
-        ),
+        savings_rate=insights_svc.savings_rate(totals["total_income"], totals["total_expense"]),
         net_worth=money(assets - liabilities),
         top_expense_accounts=[AccountTotal(**a) for a in top],
         insights=[

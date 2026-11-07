@@ -6,8 +6,9 @@ import { LineChart } from "@/components/LineChart";
 import { Money } from "@/components/Money";
 import { useChartPalette } from "@/lib/chartColors";
 import { money, moneyShort, percent, shortDate } from "@/lib/format";
-import { timeRangeLabel, useFilters } from "@/store/filters";
+import { rangeBounds, timeRangeLabel, useSectionPeriod, type TimeRange } from "@/store/filters";
 import type { Insight } from "@/lib/types";
+import { PeriodFilter } from "@/components/PeriodFilter";
 import { InfoNote } from "@/components/InfoNote";
 
 function InsightRow({ i }: { i: Insight }) {
@@ -22,16 +23,15 @@ function InsightRow({ i }: { i: Insight }) {
   );
 }
 
-function BalanceTrendCard() {
-  const timeRange = useFilters((s) => s.timeRange);
-  const { data, isLoading } = useRunningBalance();
+function BalanceTrendCard({ timeRange }: { timeRange: TimeRange }) {
+  const { data, isLoading } = useRunningBalance(rangeBounds(timeRange));
   const palette = useChartPalette();
 
   const points = data?.points ?? [];
   const labels = useMemo(() => points.map((p) => shortDate(p.date)), [points]);
 
   return (
-    <section className="card dash-grid__wide">
+    <section className="card">
       <div className="card__head">
         <h3>
           Balance over time
@@ -54,7 +54,7 @@ function BalanceTrendCard() {
             series={[
               {
                 label: "Balance",
-                color: palette.credit,
+                color: palette.categorical[0],
                 fill: true,
                 data: points.map((p) => Number(p.balance)),
               },
@@ -74,10 +74,10 @@ function BalanceTrendCard() {
   );
 }
 
-function MonthlyCard() {
-  const { data } = useMonthly();
+function MonthlyCard({ timeRange }: { timeRange: TimeRange }) {
+  const { data } = useMonthly(rangeBounds(timeRange));
   return (
-    <section className="card dash-grid__wide">
+    <section className="card">
       <div className="card__head">
         <h3>
           Income and expenses by month
@@ -99,7 +99,9 @@ function MonthlyCard() {
 }
 
 export function Dashboard() {
-  const { data, isLoading, isError, error } = useDashboard();
+  const [timeRange, setTimeRange] = useSectionPeriod("dashboard");
+  const bounds = rangeBounds(timeRange);
+  const { data, isLoading, isError, error } = useDashboard(bounds);
 
   return (
     <div>
@@ -109,12 +111,13 @@ export function Dashboard() {
           <InfoNote label="About the dashboard" lead="Where the dough goes.">
             <p>
               A running balance of what comes in and what goes out — with plain-spoken notes on
-              how you're tracking. Adjust the range and account up top; every figure follows.
+              how you're tracking. Choose a period below to explore its activity and closing position.
             </p>
           </InfoNote>
         </h1>
       </div>
 
+      <PeriodFilter value={timeRange} onChange={setTimeRange} />
       {isLoading && <div className="empty">Tallying the ledger…</div>}
       {isError && (
         <div className="empty empty--error">Couldn't load the summary: {String(error)}</div>
@@ -122,62 +125,66 @@ export function Dashboard() {
 
       {data && (
         <div className="grid dash-grid">
-          {/* Hero: the one figure on this page that gets the bold treatment */}
-          <HighlightCard title="Balance" eyebrow={<span className="pill">{data.currency}</span>}>
-            <table className="ledger balance__table">
-              <tbody>
-                <tr>
-                  <td>Money in (credits)</td>
-                  <td className="num">
-                    <Money value={data.total_income} sign="credit" />
-                  </td>
-                </tr>
-                <tr>
-                  <td>Money out (debits)</td>
-                  <td className="num">
-                    <Money value={`-${data.total_expense}`} sign="debit" />
-                  </td>
-                </tr>
-                <tr className="total">
-                  <td>Net cashflow</td>
-                  <td className="num">
-                    <Money
-                      value={data.net_cashflow}
-                      sign={Number(data.net_cashflow) >= 0 ? "credit" : "debit"}
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <p className="highlight-card__note">
-              What's left after everything else — your dough for the next stretch.
-            </p>
-          </HighlightCard>
+          <div className="dashboard-summary">
+            <HighlightCard title="Balance" eyebrow={<span className="pill">{data.currency}</span>}>
+              <table className="ledger balance__table">
+                <tbody>
+                  <tr>
+                    <td>Money in (credits)</td>
+                    <td className="num">
+                      <Money value={data.total_income} sign="credit" />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Money out (debits)</td>
+                    <td className="num">
+                      <Money value={`-${data.total_expense}`} sign="debit" />
+                    </td>
+                  </tr>
+                  <tr className="total">
+                    <td>Net cashflow</td>
+                    <td className="num">
+                      <Money
+                        value={data.net_cashflow}
+                        sign={Number(data.net_cashflow) >= 0 ? "credit" : "debit"}
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="highlight-card__note">
+                What's left after everything else — your dough for the next stretch.
+              </p>
+            </HighlightCard>
 
-          <section className="stat-col">
-            <div className="card stat">
-              <span className="eyebrow">Savings rate</span>
-              <div className="stat__value fig">{percent(data.savings_rate, 0)}</div>
-              <span className="stat__sub muted">Of everything that came in, still yours</span>
-            </div>
-            <div className="card stat">
-              <span className="eyebrow">Net worth</span>
-              <div className="stat__value">
-                <Money
-                  value={data.net_worth}
-                  sign={Number(data.net_worth) >= 0 ? "credit" : "debit"}
-                />
+            <div className="dashboard-summary__stats">
+              <div className="card stat">
+                <span className="eyebrow">Savings rate</span>
+                <div className="stat__value fig">{percent(data.savings_rate, 0)}</div>
+                <span className="stat__sub muted">Of everything that came in, still yours</span>
               </div>
-              <span className="stat__sub muted">Assets less liabilities, today</span>
-            </div>
-            <div className="card stat">
-              <span className="eyebrow">Moved, not spent</span>
-              <div className="stat__value">
-                <Money value={data.transfer_volume} />
+              <div className="card stat">
+                <span className="eyebrow">Net worth</span>
+                <div className="stat__value">
+                  <Money
+                    value={data.net_worth}
+                    sign={Number(data.net_worth) >= 0 ? "credit" : "debit"}
+                  />
+                </div>
+                <span className="stat__sub muted">Assets less liabilities{bounds.end ? `, as of ${shortDate(bounds.end)}` : ", all dates"}</span>
               </div>
-              <span className="stat__sub muted">Transfers between your own accounts</span>
+              <div className="card stat">
+                <span className="eyebrow">Moved, not spent</span>
+                <div className="stat__value">
+                  <Money value={data.transfer_volume} />
+                </div>
+                <span className="stat__sub muted">Transfers between your own accounts</span>
+              </div>
             </div>
-          </section>
+          </div>
+
+          <BalanceTrendCard timeRange={timeRange} />
+          <MonthlyCard timeRange={timeRange} />
 
           <section className="card insights">
             <div className="card__head">
@@ -197,7 +204,7 @@ export function Dashboard() {
             <div className="card__head">
               <h3>Biggest expenses</h3>
             </div>
-            <div className="card__body">
+            <div className="card__body ledger-scroll">
               {data.top_expense_accounts.length === 0 ? (
                 <div className="empty">No expenses in range.</div>
               ) : (
@@ -226,8 +233,6 @@ export function Dashboard() {
             </div>
           </section>
 
-          <BalanceTrendCard />
-          <MonthlyCard />
         </div>
       )}
     </div>

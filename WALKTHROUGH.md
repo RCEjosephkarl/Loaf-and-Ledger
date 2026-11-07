@@ -59,17 +59,17 @@ need to be running. Works on desktop and Android browsers.
 
 ---
 
-## The global bar
+## Theme and section periods
 
-Everything on screen answers to the bar across the top:
+The top bar controls **Theme** — light → dark → follow-system.
 
-- **Time range** — This month · Last 3 months · YTD · All.
-- **Account** — narrow everything to entries touching one asset or liability account
-  (your payroll bank, the GCash wallet, the credit card). Filtering by an *expense*
-  account is deliberately not offered: it would hide the very entries that fund it.
-- **Theme** — cycles light → dark → follow-system.
+**Dashboard**, **Accounts**, and **Analytics** each have their own period control:
+This month · Last 3 months · YTD · All. Each selection persists independently between
+visits. Last 3 months includes the current month; YTD ends today. All includes complete
+history, and charts include calendar dates with no activity.
 
-Your choices persist between visits. There is no currency switch: the app is PHP only.
+**Budgets** always shows the current month. **Ledger** shows all dates, ten entries at a
+time. Account selection belongs to entry forms rather than a global filter.
 
 ---
 
@@ -94,27 +94,29 @@ transactions cannot:
 
 ### 01 Dashboard — "Where the dough goes"
 Your balance sheet gets the bold "highlight card" treatment — credits in, debits out, and
-net cashflow drawn with the accountant's double underline on a filled crust-brown ground,
+net cashflow drawn with the accountant's double underline on a filled blue ground,
 so it reads first. Alongside it: your savings rate, your **net worth** (assets less
-liabilities, right now), and how much you **moved rather than spent** this period.
+liabilities at the selected closing date), and how much you **moved rather than spent** this period.
 
-Below, **plain-language notes** — a warning when spending outruns income, a flag when one
-account eats most of your outgoings, a note on what the mandatory slice (BIR, SSS,
-PhilHealth, Pag-IBIG) took before you could spend it — then your balance over time and a
-month-by-month income/expense/net chart.
+Below, paired charts show balance over time and monthly income/expense/net. The next row
+pairs **plain-language notes** with biggest expenses. Long tables scroll inside their cards.
 
 ### 02 Salary — "What survives to net"
-1. Enter your **gross** pay and choose **monthly** or **annual**.
+1. Enter your **gross** pay and choose **monthly**, **fortnightly** (every two weeks, 26 payments/year), or **annual**.
 2. Hit **Calculate**: SSS, PhilHealth, Pag-IBIG and income tax, then your net take-home
-   and the share you keep. Contributions are deducted *before* the TRAIN brackets apply.
-3. **Save profile** to persist it. The active profile feeds the dashboard and Analytics.
+   and the share you keep. Each deduction also shows its percentage of gross pay. Contributions
+   are deducted *before* the TRAIN brackets apply.
+3. **Save profile** to persist it. Saved profiles show period, gross, and net salary. Click a
+   profile to make it current: its inputs and breakdown load into the calculator and it becomes
+   the posting target. Editing calculator inputs requires a matching calculation before saving.
 4. **Post to ledger** — pick which asset account the net pay lands in, and the app writes
    the whole payslip as one balanced entry. A profile posts once; pressing it again tells
    you which entry it already made.
 
 ### 03 Accounts — "Every pocket, named"
-The chart of accounts, grouped by type, each with its debit and credit totals and a derived
-balance. Assets 1xxx, liabilities 2xxx, equity 3xxx, income 4xxx, spending 5xxx, statutory
+**Add an account** appears first. The period selector controls debit/credit activity while
+closing balances include earlier postings. Overview and each account-type group expand or
+collapse independently using their headers, including with the keyboard. Assets 1xxx, liabilities 2xxx, equity 3xxx, income 4xxx, spending 5xxx, statutory
 6xxx — a convention, not a rule the app enforces.
 
 Nothing here is stored as a running total; every balance is computed from the journal, so
@@ -137,8 +139,8 @@ until it says **✓ balanced**, so an unbalanced entry is unpostable rather than
 rejected.
 
 In the list, click any row to expand it and see both sides. The running **cash balance**
-column spans your whole history, not just the filtered window — a balance that reset at an
-arbitrary range start would not be a balance. **Voiding** an entry keeps the row, marked
+column spans your whole history, including archived asset accounts. Previous/Next moves
+through ten entries at a time without resetting balances. Totals and CSV export cover all dates. **Voiding** an entry keeps the row, marked
 void: a ledger you can silently erase from is not auditable.
 
 **Export ledger CSV** gives one row per journal line, so the books are reconstructable from

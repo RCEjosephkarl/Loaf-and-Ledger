@@ -166,6 +166,18 @@ class JournalEntryOut(BaseModel):
     lines: list[JournalLineOut]
 
 
+class JournalEntryWithBalance(JournalEntryOut):
+    cash_balance: Decimal
+
+
+class JournalEntryPage(BaseModel):
+    items: list[JournalEntryWithBalance]
+    total: int
+    posted_total: Decimal
+    page: int
+    page_size: int
+
+
 # ---------------------------------------------------------------- F1 salary
 
 

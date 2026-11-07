@@ -15,7 +15,7 @@ import { LineChart } from "@/components/LineChart";
 import { Money } from "@/components/Money";
 import { useChartPalette } from "@/lib/chartColors";
 import { money, moneyShort, percent, shortDate } from "@/lib/format";
-import { timeRangeLabel, useFilters } from "@/store/filters";
+import { rangeBounds, timeRangeLabel } from "@/store/filters";
 import type { BudgetStatus } from "@/lib/types";
 import { InfoNote } from "@/components/InfoNote";
 
@@ -97,12 +97,12 @@ function FundCard({ scope }: { scope: ReturnType<typeof toBudgetScope> }) {
 }
 
 export function Budgets() {
-  const timeRange = useFilters((s) => s.timeRange);
+  const timeRange = "this_month" as const;
   const scope = toBudgetScope(timeRange);
   const { data: rows, isLoading } = useBudgetStatus(scope);
   const { data: budgets } = useBudgets();
   const { data: accounts } = useAccounts({ type: "expense" });
-  const { data: balance } = useRunningBalance();
+  const { data: balance } = useRunningBalance(rangeBounds(timeRange));
   const upsert = useUpsertBudget();
   const remove = useDeleteBudget();
   const palette = useChartPalette();

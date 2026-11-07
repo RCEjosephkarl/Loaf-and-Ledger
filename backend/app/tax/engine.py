@@ -13,7 +13,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from decimal import Decimal
 
-from app.tax.models import Breakdown, money
+from app.tax.models import Breakdown, money, period_factor
 
 DEFAULT_YEAR = 2025
 
@@ -50,7 +50,7 @@ def compute(
 ) -> Breakdown:
     """Compute a breakdown from a gross amount expressed in `pay_period` terms."""
     rule = get_rule()
-    factor = Decimal("12") if pay_period == "monthly" else Decimal("1")
+    factor = period_factor(pay_period)
     gross_annual = money(Decimal(str(gross)) * factor)
     breakdown = rule.compute_annual(gross_annual, year or DEFAULT_YEAR)
     breakdown.pay_period = pay_period

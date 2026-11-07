@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -49,11 +49,20 @@ def list_accounts(
 def account_balances(
     as_of: datetime | None = None,
     include_archived: bool = False,
+    start: date | None = None,
+    end: date | None = None,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
+    if start and end and start > end:
+        raise HTTPException(422, "start must be on or before end")
+    if end is not None:
+        as_of = datetime.combine(end, time.max)
+    period_start = datetime.combine(start, time.min) if start else None
+    if period_start and as_of and period_start > as_of:
+        raise HTTPException(422, "start must be on or before as_of")
     rows = balances_svc.account_balances(
-        db, user.id, as_of=as_of, include_archived=include_archived
+        db, user.id, as_of=as_of, start=period_start, include_archived=include_archived
     )
     totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     for row in rows:

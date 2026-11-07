@@ -1,18 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useAccountBalances,
   useAccounts,
-  useAllEntries,
   useCreateEntry,
   useCreateSimpleEntry,
-  useEntries,
+  useEntryPage,
   usePayees,
   useVoidEntry,
 } from "@/api/queries";
 import { Money } from "@/components/Money";
 import { exportLedgerUrl } from "@/lib/api";
 import { entryDate, formatTime, localISODateTime, money } from "@/lib/format";
-import { useFilters } from "@/store/filters";
 import type { Account, EntryKind, JournalEntry, JournalLineInput } from "@/lib/types";
 import { InfoNote } from "@/components/InfoNote";
 
@@ -45,7 +43,7 @@ const KINDS: Record<EntryKind, { label: string; moneyLabel: string; counterLabel
   },
 };
 
-function QuickEntry({ accounts }: { accounts: Account[] }) {
+function QuickEntry({ accounts, onPosted }: { accounts: Account[]; onPosted: () => void }) {
   const create = useCreateSimpleEntry();
   const { data: payees } = usePayees();
 
@@ -73,6 +71,7 @@ function QuickEntry({ accounts }: { accounts: Account[] }) {
       memo: memo || undefined,
       payee_id: payeeId === "" ? undefined : Number(payeeId),
     });
+    onPosted();
     setAmount("");
     setMemo("");
   };
@@ -197,7 +196,7 @@ interface DraftLine {
 
 const emptyLine = (): DraftLine => ({ account_id: "", side: "debit", amount: "", memo: "" });
 
-function JournalGrid({ accounts }: { accounts: Account[] }) {
+function JournalGrid({ accounts, onPosted }: { accounts: Account[]; onPosted: () => void }) {
   const create = useCreateEntry();
   const [open, setOpen] = useState(false);
   const [lines, setLines] = useState<DraftLine[]>([emptyLine(), emptyLine()]);
@@ -229,6 +228,7 @@ function JournalGrid({ accounts }: { accounts: Account[] }) {
         memo: l.memo || undefined,
       }));
     await create.mutateAsync({ occurred_at: occurredAt, lines: payload, memo: memo || undefined });
+    onPosted();
     setLines([emptyLine(), emptyLine()]);
     setMemo("");
   };
@@ -463,11 +463,17 @@ function EntryRow({
 }
 
 export function Ledger() {
-  const accountId = useFilters((s) => s.accountId);
-  const { data: accounts } = useAccounts();
-  const { data: entries, isLoading } = useEntries();
-  const { data: allEntries } = useAllEntries();
-  const { data: balances } = useAccountBalances();
+  const [page, setPage] = useState(1);
+  const { data: accounts } = useAccounts({ includeArchived: true });
+  const { data, isLoading, isFetching, isError, error, refetch } = useEntryPage(page);
+  const entries = data?.items;
+  const { data: balances } = useAccountBalances({}, true);
+  const lastPage = Math.max(1, Math.ceil((data?.total ?? 0) / 10));
+  useEffect(() => {
+    if (data && page > lastPage) setPage(lastPage);
+  }, [data, lastPage, page]);
+  const onPosted = () => setPage(1);
+  const selectableAccounts = accounts?.filter((a) => a.is_active && !a.archived_at);
 
   const accountName = useMemo(() => {
     const map = new Map<number, string>();
@@ -475,35 +481,7 @@ export function Ledger() {
     return (id: number) => map.get(id) ?? `Account ${id}`;
   }, [accounts]);
 
-  /**
-   * Running cash balance per entry, computed across the *whole* history rather
-   * than the filtered window — a balance that reset at an arbitrary range
-   * start would not be a balance.
-   */
-  const runningByEntry = useMemo(() => {
-    const cashIds = new Set(
-      (accounts ?? []).filter((a) => a.type === "asset").map((a) => a.id),
-    );
-    const ordered = [...(allEntries ?? [])].sort((a, b) =>
-      a.occurred_at === b.occurred_at ? a.id - b.id : a.occurred_at.localeCompare(b.occurred_at),
-    );
-    const out = new Map<number, string>();
-    let running = 0;
-    for (const entry of ordered) {
-      for (const line of entry.lines) {
-        if (!cashIds.has(line.account_id)) continue;
-        running += Number(line.debit) - Number(line.credit);
-      }
-      out.set(entry.id, running.toFixed(2));
-    }
-    return out;
-  }, [allEntries, accounts]);
-
   const cashOnHand = Number(balances?.totals_by_type.asset ?? 0);
-  const periodTotal = (entries ?? []).reduce(
-    (sum, e) => sum + e.lines.reduce((s, l) => s + Number(l.debit), 0),
-    0,
-  );
 
   return (
     <div>
@@ -529,16 +507,16 @@ export function Ledger() {
           <span className="stat__sub muted">Every asset account, right now</span>
         </div>
         <div className="card stat">
-          <span className="eyebrow">Posted this period</span>
+          <span className="eyebrow">Posted across all dates</span>
           <div className="stat__value">
-            <Money value={periodTotal.toFixed(2)} />
+            <Money value={data?.posted_total ?? "0"} />
           </div>
-          <span className="stat__sub muted">{entries?.length ?? 0} entries in this range</span>
+          <span className="stat__sub muted">{data?.total ?? 0} entries across all dates</span>
         </div>
         <div className="card stat">
           <span className="eyebrow">Export</span>
           <div className="stat__value" style={{ fontSize: 15 }}>
-            <a className="btn" href={exportLedgerUrl({ account_id: accountId ?? undefined })}>
+            <a className="btn" href={exportLedgerUrl()}>
               ↓ Ledger CSV
             </a>
           </div>
@@ -547,8 +525,8 @@ export function Ledger() {
       </section>
 
       <div className="grid" style={{ gap: 20 }}>
-        {accounts && <QuickEntry accounts={accounts} />}
-        {accounts && <JournalGrid accounts={accounts} />}
+        {selectableAccounts && <QuickEntry accounts={selectableAccounts} onPosted={onPosted} />}
+        {selectableAccounts && <JournalGrid accounts={selectableAccounts} onPosted={onPosted} />}
 
         <section className="card">
           <div className="card__head">
@@ -557,8 +535,11 @@ export function Ledger() {
           </div>
           <div className="card__body">
             {isLoading && <div className="empty">Reading the ledger…</div>}
-            {!isLoading && !entries?.length && (
-              <div className="empty">Nothing recorded in this range yet.</div>
+            {isError && <div className="empty empty--error">
+              {String(error)} <button className="btn" onClick={() => refetch()}>Retry</button>
+            </div>}
+            {!isLoading && !isError && !entries?.length && (
+              <div className="empty">Nothing recorded yet.</div>
             )}
             {!!entries?.length && (
               <table className="ledger">
@@ -577,13 +558,24 @@ export function Ledger() {
                       key={entry.id}
                       entry={entry}
                       accountName={accountName}
-                      balance={runningByEntry.get(entry.id)}
+                      balance={entry.cash_balance}
                     />
                   ))}
                 </tbody>
               </table>
             )}
           </div>
+          <nav className="pagination" aria-label="Ledger pages">
+              <button className="btn" disabled={page <= 1 || isFetching}
+                onClick={() => setPage((p) => p - 1)}>Previous</button>
+              <span className="eyebrow" aria-live="polite">
+                {data
+                  ? data.total ? `${(page - 1) * 10 + 1}–${Math.min(page * 10, data.total)} of ${data.total}` : "0 entries"
+                  : isError ? `Page ${page} could not load` : "Loading entries…"}
+              </span>
+              <button className="btn" disabled={!data || page >= lastPage || isFetching}
+                onClick={() => setPage((p) => p + 1)}>Next</button>
+          </nav>
         </section>
       </div>
     </div>

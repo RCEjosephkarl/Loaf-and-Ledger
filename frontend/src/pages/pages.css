@@ -1,7 +1,14 @@
 /* ---- Page grids ---- */
-.dash-grid { grid-template-columns: 1.6fr 1fr; align-items: start; }
-.dash-grid__wide { grid-column: 1 / -1; }
-.stat-col { display: flex; flex-direction: column; gap: 20px; }
+.dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.dashboard-summary { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.dashboard-summary__stats { display: contents; }
+.dashboard-summary .stat__value { font-size: clamp(20px, 2.1vw, 29px); overflow-wrap: anywhere; }
+.dashboard-summary .balance__table td { padding: 8px 2px; font-size: 12px; }
+.dashboard-summary .balance__table td.num { font-size: 13px; white-space: nowrap; }
+.dashboard-summary .highlight-card .balance__table .total td { font-size: 16px; white-space: nowrap; }
+.dashboard-summary .highlight-card .balance__table .total td:first-child { font-size: 14px; }
+.dashboard-summary .highlight-card .card__body { padding: 14px; }
+.dashboard-summary .highlight-card__note { font-size: 12px; }
 .salary-grid { grid-template-columns: 360px 1fr; align-items: start; }
 .ledger-grid { grid-template-columns: 320px 1fr; align-items: start; }
 .budget-grid { grid-template-columns: 300px 1fr; align-items: start; }
@@ -75,8 +82,31 @@
 .ledger-scroll table.ledger thead th {
   position: sticky;
   top: 0;
-  background: var(--surface);
+  background: var(--card-bg);
   z-index: 1;
+}
+
+.period-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.filterbar--theme { justify-content: flex-end; }
+.account-group > summary, .account-overview > summary { cursor: pointer; list-style: none; }
+.account-group > summary::-webkit-details-marker, .account-overview > summary::-webkit-details-marker { display: none; }
+.account-group > summary::before, .account-overview > summary::before { content: "▸"; color: var(--muted); }
+.account-group[open] > summary::before, .account-overview[open] > summary::before { content: "▾"; }
+.account-group > summary h3, .account-overview > summary h3 { flex: 1; }
+.account-overview { margin-bottom: 20px; }
+.pagination { display: flex; justify-content: center; align-items: center; gap: 16px; padding: 16px; border-top: 1px solid var(--rule); }
+.profile-row { cursor: pointer; }
+.ledger .profile-row--active { background: var(--row-tint); box-shadow: inset 3px 0 var(--accent); }
+
+@media (min-width: 900px) and (max-width: 1199px) {
+  .dashboard-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .dashboard-summary .balance__table td,
+  .dashboard-summary .balance__table td.num { font-size: 11px; }
+  .dashboard-summary .highlight-card .balance__table .total td { font-size: 14px; }
+  .dashboard-summary .highlight-card .balance__table .total td:first-child { font-size: 12px; }
 }
 .ledger-row--editing td { background: var(--row-tint); vertical-align: top; padding-top: 10px; }
 .ledger-row--editing select,
@@ -100,7 +130,8 @@
 .chartjs-card { position: relative; width: 100%; height: 240px; }
 
 /* ---- Responsive ---- */
-@media (max-width: 900px) {
+@media (max-width: 899px) {
+  .dashboard-summary { grid-template-columns: minmax(0, 1fr); }
   .dash-grid,
   .salary-grid,
   .ledger-grid,

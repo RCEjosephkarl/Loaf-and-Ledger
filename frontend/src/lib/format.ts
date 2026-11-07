@@ -91,3 +91,10 @@ export const ACCOUNT_TYPE_LABEL: Record<string, string> = {
 
 /** Display order for the chart of accounts — balance sheet before P&L. */
 export const ACCOUNT_TYPE_ORDER = ["asset", "liability", "equity", "income", "expense"] as const;
+
+export const PAY_PERIOD_LABEL: Record<string, string> = {
+  monthly: "Monthly", fortnightly: "Fortnightly", annual: "Annual",
+};
+export const PER_PERIOD_LABEL: Record<string, string> = {
+  monthly: "Per month", fortnightly: "Per fortnight", annual: "Per year",
+};

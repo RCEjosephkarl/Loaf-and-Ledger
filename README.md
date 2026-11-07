@@ -78,7 +78,7 @@ recorded in [`CHANGELOGS.md`](./CHANGELOGS.md):
 | **Color & Accessibility** | CVD-validated 8-slot categorical palette | Validated with colour-vision deficiency simulation on both light and dark themes (CVD dE 9.1 light / 8.4 dark; normal vision dE 19.6 / 19.3). Semantic financial roles (credit, debit, good, warn) are reserved and never cycled into series colors. |
 | **Auth** | None (single implicit user) | Scoped as a personal, local, self-hosted tool. User models retain foreign-key relationships to support an app-password seam without schema overhaul. |
 | **Insights** | Deterministic rule-based heuristics | Transparent, explainable, and verifiable by hand. No external AI dependencies or statistical black boxes for financial advice. |
-| **Frontend state** | TanStack Query (server state) + Zustand (global filters) | Read-heavy and cache-friendly. A single Zustand store manages time-range, account filter, and theme, cascading automatically to all query hooks. |
+| **Frontend state** | TanStack Query (server state) + Zustand (section preferences) | Read-heavy and cache-friendly. Zustand persists independent Dashboard, Accounts, and Analytics periods plus theme. Query hooks receive explicit date bounds; Budgets uses the current month and Ledger spans all dates. |
 | **Datastores** | SQLite (dev) / PostgreSQL (prod) for OLTP; DuckDB for OLAP | Zero-configuration local startup with SQLite; production keeps indexable JSONB via SQLAlchemy type variants. `DATABASE_URL` and `WAREHOUSE_PATH` configure each datastore independently. |
 
 ---
@@ -89,7 +89,7 @@ Two stores, two jobs. The write-through ETL arrow between them forms the backbon
 
 ```
         ┌───────────────────── frontend/ (Vite + React + TS) ─────────────────────┐
-        │  Zustand { timeRange, accountId, theme } ─ cascades to every read        │
+        │  Zustand { periods by section, theme } ─ explicit query dates        │
         │  TanStack Query hooks ───────────────▶  /api/v1/*                        │
         └────────────────────────────────────┬────────────────────────────────────┘
                                              │ (Vite dev proxy)
@@ -165,8 +165,8 @@ The DuckDB OLAP warehouse models financial history across four dimensions, two f
 |---|---|---|
 | **Accounts** | `GET /accounts`<br>`POST /accounts`<br>`PATCH /accounts/{id}`<br>`DELETE /accounts/{id}`<br>`GET /accounts/balances` | Chart of accounts CRUD, soft archiving (`DELETE`), and point-in-time normal balance aggregation. |
 | **Payees** | `GET /payees`<br>`POST /payees` | Payee directory for transaction tagging. |
-| **F1 Salary** | `POST /salary/calculate`<br>`GET /salary/profiles`<br>`POST /salary/profiles`<br>`PATCH /salary/profiles/{id}`<br>`DELETE /salary/profiles/{id}`<br>**`POST /salary/profiles/{id}/post`** | Gross-to-net tax calculation, profile management, and **one-click idempotent payslip posting** to the journal. |
-| **F2 Ledger** | `GET /ledger/entries`<br>`POST /ledger/entries`<br>`GET /ledger/entries/{id}`<br>`PATCH /ledger/entries/{id}`<br>`DELETE /ledger/entries/{id}`<br>`POST /ledger/entries/simple` | Complete journal CRUD, soft-voiding (`DELETE`), and two-line quick entry posting. |
+| **F1 Salary** | `POST /salary/calculate`<br>`GET /salary/profiles`<br>`POST /salary/profiles`<br>`POST /salary/profiles/{id}/activate`<br>`DELETE /salary/profiles/{id}`<br>**`POST /salary/profiles/{id}/post`** | Gross-to-net tax calculation, profile management, and **one-click idempotent payslip posting** to the journal. |
+| **F2 Ledger** | `GET /ledger/entries`<br>`GET /ledger/entries/page`<br>`POST /ledger/entries`<br>`GET /ledger/entries/{id}`<br>`PATCH /ledger/entries/{id}`<br>`DELETE /ledger/entries/{id}`<br>`POST /ledger/entries/simple` | Complete journal CRUD, soft-voiding (`DELETE`), and two-line quick entry posting. |
 | **F3 Analytics** | `GET /analytics/overview`<br>`GET /analytics/monthly`<br>`GET /analytics/monthly-by-account`<br>`GET /analytics/running-balance`<br>`GET /analytics/earnings` | DuckDB OLAP queries: multi-act financial summary, stacked mix, cashflow series, and waterfall items. |
 | **F4 Budgets** | `GET /budgets`<br>`POST /budgets`<br>`PATCH /budgets/{id}`<br>`DELETE /budgets/{id}`<br>`GET /budgets/status`<br>`GET /budgets/fund`<br>`POST /budgets/fund`<br>`DELETE /budgets/fund` | Expense account budget limits, multi-month period status, and period initial fund tracking with carryover. |
 | **F5 Export** | `GET /export/ledger.csv`<br>`GET /export/trial-balance.csv` | Streamed CSVs: granular journal lines (`ledger.csv`) and verified debit/credit balance proofs (`trial-balance.csv`). |
@@ -175,6 +175,22 @@ The DuckDB OLAP warehouse models financial history across four dimensions, two f
 | **Meta & User** | `GET /meta`<br>`GET /user`<br>`PATCH /user` | Instance configuration, modelled jurisdiction metadata, and user preferences. |
 
 ---
+
+### Section date ranges and ledger pages
+
+Dashboard, Accounts, and Analytics have independent period controls. Monthly analytics accept
+inclusive `start`/`end` dates, filter before grouping, and include empty calendar months.
+Date bounds override the legacy `months` parameter; omitting both returns complete history.
+Daily running-balance responses fill empty days and carry forward the historical balance.
+
+`GET /accounts/balances?start=YYYY-MM-DD&end=YYYY-MM-DD` returns period debit/credit
+activity and closing balances through `end`, including earlier postings. Legacy unfiltered
+and `as_of` timestamp requests remain available.
+
+`GET /ledger/entries/page?page=1&page_size=10` returns `items`, `total`, `posted_total`,
+`page`, and `page_size`. Each item includes `cash_balance` computed before pagination across
+all non-voided asset postings, including archived accounts. Entries sort newest first by
+posting timestamp and ID. The original list and CSV endpoints remain available.
 
 ## 4. Method: the tax engine & payslip posting
 
@@ -241,7 +257,7 @@ screens clean and figures above the fold while remaining accessible via hover, c
 ### 02 · Salary — "What survives to net"
 - **Interactive Calculator:** Enter gross pay (monthly or annual) to preview SSS, PhilHealth,
   Pag-IBIG, BIR withholding, net take-home, and effective deduction rates.
-- **Profile Snapshots:** Save configurations as persistent profiles for instant reference.
+- **Profile Snapshots:** Save monthly, fortnightly (26 payments/year), or annual configurations. Select a saved profile to make it current for calculation and ledger posting; gross and net columns use that profile’s pay period. New periodic snapshots reconcile net pay after rounding each deduction to cents.
 - **One-Click Ledger Posting:** Designate an asset account (e.g. Payroll Bank) and post the payslip
   directly into the journal as a balanced 6-line entry with full idempotency guards.
 
@@ -269,7 +285,7 @@ screens clean and figures above the fold while remaining accessible via hover, c
 ### 05 · Budgets — "Limits, and how close you are"
 - **Category Limits:** Set monthly limits across expense accounts with progress tracks that shift
   from green to amber to red when exceeding 100% utilization.
-- **Flexible Scopes:** Switch between Month, 3 Months, YTD, and All period scopes.
+- **Current Month:** The Budgets page always shows the current month. Backend APIs retain Month, 3 Months, YTD, and All scopes for explicit callers.
 - **Initial Fund Tracking:** Tracks starting balance for a period, defaulting to prior cumulative
   cashflow with user override capability (`/budgets/fund`).
 - **Warehouse-Backed:** Budget spend queries DuckDB directly, ensuring zero discrepancy with Analytics.
@@ -374,7 +390,7 @@ Loaf-and-Ledger/
 │   │   ├── api/           client endpoints
 │   │   ├── components/    Brand · FilterBar · HighlightCard · InfoNote · Layout · Money · WaterfallChart · Charts
 │   │   ├── pages/         Dashboard · Salary · Accounts · Ledger · Budgets · Analytics
-│   │   ├── store/         Zustand filter store (timeRange, accountId, theme)
+│   │   ├── store/         Zustand section-period and theme preferences
 │   │   └── lib/           CVD-validated chart colors & utilities
 │   ├── package.json · tsconfig.json · vite.config.ts
 ├── README.md · WALKTHROUGH.md · CHANGELOGS.md

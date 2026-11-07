@@ -6,7 +6,7 @@ export type TimeRange = "this_month" | "last_3m" | "ytd" | "all";
 export type Theme = "light" | "dark" | "system";
 
 /** Single source of the range presets + their display labels, shared by
- * FilterBar's segmented control and any page/card that needs to describe
+ * the section period control and any page/card that needs to describe
  * the currently selected scope. */
 export const TIME_RANGES: { value: TimeRange; label: string }[] = [
   { value: "this_month", label: "This month" },
@@ -19,30 +19,46 @@ export function timeRangeLabel(range: TimeRange): string {
   return TIME_RANGES.find((r) => r.value === range)?.label ?? range;
 }
 
+export type PeriodSection = "dashboard" | "accounts" | "analytics";
+export type DateBounds = { start?: string | null; end?: string | null };
+const DEFAULT_PERIODS: Record<PeriodSection, TimeRange> = {
+  dashboard: "this_month", accounts: "this_month", analytics: "this_month",
+};
+
 export interface FilterState {
-  /** Global filters. Currency and region are gone — the app is single-currency
-   * and single-jurisdiction, so account is the dimension worth slicing on. */
-  accountId: number | null; // null = every account
-  timeRange: TimeRange;
+  periods: Record<PeriodSection, TimeRange>;
   theme: Theme;
-  setAccountId: (id: number | null) => void;
-  setTimeRange: (t: TimeRange) => void;
-  setTheme: (t: Theme) => void;
+  setPeriod: (section: PeriodSection, range: TimeRange) => void;
+  setTheme: (theme: Theme) => void;
 }
 
 export const useFilters = create<FilterState>()(
   persist(
     (set) => ({
-      accountId: null,
-      timeRange: "this_month",
+      periods: { ...DEFAULT_PERIODS },
       theme: "system",
-      setAccountId: (accountId) => set({ accountId }),
-      setTimeRange: (timeRange) => set({ timeRange }),
+      setPeriod: (section, range) => set((state) => ({
+        periods: { ...state.periods, [section]: range },
+      })),
       setTheme: (theme) => set({ theme }),
     }),
-    { name: "loaf-ledger-filters", version: 2 },
+    {
+      name: "loaf-ledger-filters",
+      version: 3,
+      partialize: (state) => ({ theme: state.theme, periods: state.periods }),
+      migrate: (persisted) => {
+        const old = persisted as { theme?: Theme } | undefined;
+        return { theme: old?.theme ?? "system", periods: { ...DEFAULT_PERIODS } };
+      },
+    },
   ),
 );
+
+export function useSectionPeriod(section: PeriodSection) {
+  const range = useFilters((state) => state.periods[section]);
+  const setPeriod = useFilters((state) => state.setPeriod);
+  return [range, (value: TimeRange) => setPeriod(section, value)] as const;
+}
 
 /** Resolve a time-range preset to inclusive ISO start/end (or nulls for "all"). */
 export function rangeBounds(range: TimeRange): { start: string | null; end: string | null } {

@@ -13,7 +13,7 @@ defect this schema exists to remove.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from app.tax.models import money
@@ -131,100 +131,145 @@ def by_account(
 # -------------------------------------------------------------- time series
 
 
-def monthly(months: int = 6, account_id: int | None = None) -> list[dict]:
-    """Trailing-N-month income vs expense, read from the monthly rollup."""
+def _series_bounds(start: date | None, end: date | None) -> tuple[date | None, date | None]:
+    """Unbounded sides follow history; explicit sides include empty dates."""
     with cursor() as conn:
-        rows = conn.execute(
-            """
-            SELECT m.month_key,
-                   COALESCE(SUM(m.inflow), 0),
-                   COALESCE(SUM(m.outflow), 0)
-            FROM agg_monthly_account m
-            GROUP BY m.month_key
-            ORDER BY m.month_key
-            """
-        ).fetchall()
-    series = [
-        {
-            "month": f"{r[0] // 100:04d}-{r[0] % 100:02d}",
-            "income": _dec(r[1]),
-            "expense": _dec(r[2]),
-            "net": money(_dec(r[1]) - _dec(r[2])),
-        }
-        for r in rows
-    ]
-    return series[-months:]
+        first, last = conn.execute(
+            "SELECT MIN(d.full_date), MAX(d.full_date) FROM fact_ledger_line f "
+            "JOIN dim_date d ON d.date_key = f.date_key"
+        ).fetchone()
+    return start or first, end or last
 
 
-def monthly_by_account(months: int = 6, flow: str = "outflow") -> dict:
-    """Per-account monthly totals — feeds the stacked expense-mix chart."""
+def _month_window(
+    months: int | None, start: date | None, end: date | None
+) -> tuple[date | None, date | None, list[str]]:
+    bounded = start is not None or end is not None
+    start, end = _series_bounds(start, end)
+    if start is None or end is None or start > end:
+        return start, end, []
+    if months is not None and not bounded:
+        index = end.year * 12 + end.month - months
+        start = max(start, date(index // 12, index % 12 + 1, 1))
+    month = start.replace(day=1)
+    labels = []
+    while month <= end:
+        labels.append(month.strftime("%Y-%m"))
+        month = date(month.year + month.month // 12, month.month % 12 + 1, 1)
+    return start, end, labels
+
+
+def monthly(
+    months: int | None = None,
+    account_id: int | None = None,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+) -> list[dict]:
+    """Calendar-month totals filtered by posting dates before aggregation."""
+    start, end, labels = _month_window(months, start, end)
+    if not labels:
+        return []
+    lo, hi = _bounds(start, end)
+    clause, params = _account_clause(account_id, [lo, hi])
     with cursor() as conn:
-        month_rows = conn.execute(
-            "SELECT DISTINCT month_key FROM agg_monthly_account ORDER BY month_key"
-        ).fetchall()
-        month_keys = [r[0] for r in month_rows][-months:]
-        if not month_keys:
-            return {"months": [], "series": []}
-        placeholders = ",".join("?" for _ in month_keys)
-        column = "m.outflow" if flow == "outflow" else "m.inflow"
         rows = conn.execute(
             f"""
-            SELECT a.account_id, a.name, m.month_key, {column}
-            FROM agg_monthly_account m
-            JOIN dim_account a ON a.account_key = m.account_key
-            WHERE m.month_key IN ({placeholders}) AND a.flow_class = ?
-            ORDER BY a.code, m.month_key
+            SELECT d.month_key,
+                   SUM(CASE WHEN a.flow_class = 'inflow' THEN f.signed_amount ELSE 0 END),
+                   SUM(CASE WHEN a.flow_class = 'outflow' THEN f.signed_amount ELSE 0 END)
+            FROM fact_ledger_line f
+            JOIN dim_date d ON d.date_key = f.date_key
+            JOIN dim_account a ON a.account_key = f.account_key
+            WHERE f.date_key BETWEEN ? AND ? AND NOT f.is_transfer {clause}
+            GROUP BY d.month_key
             """,
-            [*month_keys, flow],
+            params,
         ).fetchall()
-
-    labels = [f"{k // 100:04d}-{k % 100:02d}" for k in month_keys]
-    index = {k: i for i, k in enumerate(month_keys)}
-    series: dict[int, dict] = {}
-    for account_id, name, month_key, amount in rows:
-        bucket = series.setdefault(
-            account_id,
-            {"account_id": account_id, "account_name": name, "values": [ZERO] * len(month_keys)},
+    values = {f"{r[0] // 100:04d}-{r[0] % 100:02d}": r[1:] for r in rows}
+    series = []
+    for label in labels:
+        income, expense = (_dec(v) for v in values.get(label, (ZERO, ZERO)))
+        series.append(
+            {"month": label, "income": income, "expense": expense, "net": money(income - expense)}
         )
-        bucket["values"][index[month_key]] = _dec(amount)
-    # Drop accounts that were all zeros across the window — a legend entry for
-    # a flat line at zero is noise, not information.
-    kept = [s for s in series.values() if any(v != 0 for v in s["values"])]
-    return {"months": labels, "series": kept}
+    return series
 
 
-def running_balance(start: date | None = None, end: date | None = None) -> list[dict]:
-    """Daily in/out and a cumulative balance.
-
-    `balance` restarts at the window (what the range-scoped charts show);
-    `cumulative_balance` is the all-time figure the same row sits at.
-    """
+def monthly_by_account(
+    months: int | None = None,
+    flow: str = "outflow",
+    *,
+    start: date | None = None,
+    end: date | None = None,
+) -> dict:
+    start, end, labels = _month_window(months, start, end)
+    if not labels:
+        return {"months": [], "series": []}
     lo, hi = _bounds(start, end)
     with cursor() as conn:
         rows = conn.execute(
             """
-            SELECT d.full_date, c.inflow, c.outflow, c.net, c.cumulative_balance
-            FROM agg_daily_cashflow c
-            JOIN dim_date d ON d.date_key = c.date_key
-            WHERE c.date_key BETWEEN ? AND ?
-            ORDER BY c.date_key
+            SELECT a.account_id, a.name, d.month_key, SUM(f.signed_amount)
+            FROM fact_ledger_line f
+            JOIN dim_account a ON a.account_key = f.account_key
+            JOIN dim_date d ON d.date_key = f.date_key
+            WHERE f.date_key BETWEEN ? AND ? AND a.flow_class = ? AND NOT f.is_transfer
+            GROUP BY a.account_id, a.name, a.code, d.month_key
+            ORDER BY a.code, d.month_key
+            """,
+            [lo, hi, flow],
+        ).fetchall()
+    index = {label: i for i, label in enumerate(labels)}
+    series = {}
+    for account_id, name, month_key, amount in rows:
+        bucket = series.setdefault(
+            account_id,
+            {"account_id": account_id, "account_name": name, "values": [money(ZERO)] * len(labels)},
+        )
+        bucket["values"][index[f"{month_key // 100:04d}-{month_key % 100:02d}"]] = _dec(amount)
+    return {"months": labels, "series": [s for s in series.values() if any(s["values"])]}
+
+
+def running_balance(start: date | None = None, end: date | None = None) -> list[dict]:
+    """Daily activity and cumulative balances, including days without postings."""
+    start, end = _series_bounds(start, end)
+    if start is None or end is None or start > end:
+        return []
+    lo, hi = _bounds(start, end)
+    with cursor() as conn:
+        rows = conn.execute(
+            """
+            SELECT d.full_date, c.inflow, c.outflow, c.net
+            FROM agg_daily_cashflow c JOIN dim_date d ON d.date_key = c.date_key
+            WHERE c.date_key BETWEEN ? AND ? ORDER BY c.date_key
             """,
             [lo, hi],
         ).fetchall()
+        previous = conn.execute(
+            "SELECT cumulative_balance FROM agg_daily_cashflow WHERE date_key < ? "
+            "ORDER BY date_key DESC LIMIT 1",
+            [lo],
+        ).fetchone()
+    opening = _dec(previous[0]) if previous else ZERO
+    values = {row[0]: row[1:] for row in rows}
     running = ZERO
     points = []
-    for full_date, inflow, outflow, net, cumulative in rows:
-        running += _dec(net)
+    day = start
+    while day <= end:
+        income, expense, net = (_dec(v) for v in values.get(day, (ZERO, ZERO, ZERO)))
+        running = money(running + net)
         points.append(
             {
-                "date": full_date,
-                "income": _dec(inflow),
-                "expense": _dec(outflow),
-                "net": _dec(net),
-                "balance": money(running),
-                "cumulative_balance": _dec(cumulative),
+                "date": day,
+                "income": income,
+                "expense": expense,
+                "net": net,
+                "balance": running,
+                "cumulative_balance": money(opening + running),
             }
         )
+        day += timedelta(days=1)
     return points
 
 

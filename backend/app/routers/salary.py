@@ -77,8 +77,9 @@ def create_profile(
     breakdown = _compute(payload.gross_amount, payload.pay_period, payload.tax_year)
     year = payload.tax_year or settings.default_tax_year
 
+    previous_active = _active_profiles(db, user.id) if payload.make_active else []
     if payload.make_active:
-        for p in _active_profiles(db, user.id):
+        for p in previous_active:
             p.is_active = False
 
     profile = SalaryProfile(
@@ -96,6 +97,8 @@ def create_profile(
     db.commit()
     db.refresh(profile)
     etl.safe_apply_payslip(db, profile.id)
+    for previous in previous_active:
+        etl.safe_apply_payslip(db, previous.id)
     return profile
 
 
@@ -111,9 +114,7 @@ def activate_profile(
     db.refresh(profile)
     # The `is_active` flag is a dimension attribute on fact_payslip_item, so
     # both the old and new active profiles need reloading.
-    for p in db.execute(
-        select(SalaryProfile).where(SalaryProfile.user_id == user.id)
-    ).scalars():
+    for p in db.execute(select(SalaryProfile).where(SalaryProfile.user_id == user.id)).scalars():
         etl.safe_apply_payslip(db, p.id)
     return profile
 

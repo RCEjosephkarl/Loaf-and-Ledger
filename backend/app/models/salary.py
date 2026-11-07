@@ -14,6 +14,7 @@ from app.models.base import Base, JSONVariant, Money
 
 class PayPeriod(str, enum.Enum):
     MONTHLY = "monthly"
+    FORTNIGHTLY = "fortnightly"
     ANNUAL = "annual"
 
 
