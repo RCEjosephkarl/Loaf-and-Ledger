@@ -4,6 +4,64 @@ All notable changes to Loaf & Ledger are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to adhere to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Section periods:** Dashboard, Accounts, and Analytics each persist an independent
+  This month / Last 3 months / YTD / All selection. Budgets displays the current month.
+- **Fortnightly salaries:** Every two weeks means 26 pay periods per year. Calculator
+  deduction rows show their percentage of gross, and saved profiles show period, gross,
+  and net salary. Selecting a profile makes it current for calculation and posting.
+- **Ledger pagination:** `GET /ledger/entries/page` returns ten entries by default with
+  total count, all-history posted total, and cash balances calculated before pagination.
+  The existing list and CSV endpoints remain available.
+- **Account period activity:** `/accounts/balances` accepts inclusive `start` and `end`
+  dates for debits/credits while closing balances retain earlier history. Existing
+  unfiltered and `as_of` timestamp requests remain supported.
+- **Migration `0002_fortnightly`:** Extends the PostgreSQL pay-period enum and SQLite
+  column length. Downgrade is refused while fortnightly profiles remain.
+- Regression coverage for section date bounds, empty calendar periods, histories longer
+  than 36 months, periodic rounding, activation/warehouse synchronization, pagination
+  beyond 2,000 entries, and migration upgrade/downgrade behavior. Latest full validation:
+  **121 passing backend tests**, backend lint, frontend type checking and build, and
+  desktop/mobile browser checks on 2026-11-07.
+
+### Changed
+
+- The global toolbar now controls theme. Existing theme preferences survive the browser
+  settings migration; old global date/account filters are discarded.
+- Dashboard summary cards form four columns at 1200px and above, two at 900–1199px,
+  and one below 900px. Charts and insights/expense cards appear in pairs on desktop;
+  long tables scroll locally with sticky headers. Balance over time uses theme-aware blue.
+- Accounts places Add an account first, followed by its period control and independently
+  collapsible Overview and account-type groups.
+- Monthly analytics accept date bounds before aggregation, include empty months, and
+  return full history when neither bounds nor `months` are supplied. Date bounds take
+  precedence over legacy `months` requests. Daily balance series fill empty days.
+- Ledger reads all dates, with Previous/Next controls, page reset after posting, last-page
+  adjustment after voiding, and retry controls for failed page requests.
+- Setup documentation separates a clean chart of accounts from optional demo data.
+
+### Fixed
+
+- New periodic salary snapshots derive net pay from rounded period deductions, keeping
+  displayed net pay and the ledger deposit equal to the cent.
+- Profile changes clear stale calculator previews and posting feedback. Failed activation
+  preserves the current profile; deleting a profile does not activate it.
+- Creating or activating a salary profile synchronizes active flags in the warehouse.
+- Dashboard net worth now uses the selected closing date. Monthly chart spans follow
+  the selected period instead of requesting six months for This month.
+
+### Local testing operations
+
+- On 2026-11-07, the local financial data was reset after a verified SQLite backup:
+  36 zero-balance built-in accounts and the existing user were retained; ledger entries,
+  salary profiles, budgets, payees, and fund overrides were cleared. The warehouse was
+  rebuilt and integrity checks passed. This records a local maintenance operation, not
+  an automatic startup reset. See [UI/UX testing](docs/UI_UX_TESTING.md) for the baseline,
+  backup location, recovery steps, and test checklist.
+
 ## [0.2.0] — 2026-09-09
 
 A structural pass: the write model becomes a real double-entry ledger, analytics move to a

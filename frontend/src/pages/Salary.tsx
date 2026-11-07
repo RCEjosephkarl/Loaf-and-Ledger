@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   useAccounts,
+  useActivateProfile,
   useActiveSalary,
   useCalculate,
   useDeleteProfile,
@@ -10,7 +11,7 @@ import {
   useSaveProfile,
 } from "@/api/queries";
 import { Money } from "@/components/Money";
-import { localISODateTime, money, percent } from "@/lib/format";
+import { localISODateTime, money, percent, PAY_PERIOD_LABEL, PER_PERIOD_LABEL } from "@/lib/format";
 import type { Breakdown, PayPeriod } from "@/lib/types";
 import { InfoNote } from "@/components/InfoNote";
 
@@ -23,14 +24,15 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 function BreakdownTable({ breakdown }: { breakdown: Breakdown }) {
-  const monthly = breakdown.pay_period === "monthly";
+  const gross = Number(breakdown.gross_period);
   return (
     <table className="ledger">
       <thead>
         <tr>
           <th>Line</th>
-          <th className="num">{monthly ? "Per month" : "Per year"}</th>
+          <th className="num">{PER_PERIOD_LABEL[breakdown.pay_period]}</th>
           <th className="num">Annual</th>
+          <th className="num">% of gross deducted</th>
         </tr>
       </thead>
       <tbody>
@@ -47,6 +49,10 @@ function BreakdownTable({ breakdown }: { breakdown: Breakdown }) {
               />
             </td>
             <td className="num muted fig">{money(item.amount)}</td>
+            <td className="num muted fig">
+              {gross > 0 && (item.kind === "tax" || item.kind === "social")
+                ? percent(Number(item.amount_period) / gross, 2) : "—"}
+            </td>
           </tr>
         ))}
       </tbody>
@@ -56,13 +62,16 @@ function BreakdownTable({ breakdown }: { breakdown: Breakdown }) {
 
 /** Posts the active payslip to the ledger as one balanced multi-line entry —
  * gross credited to income, each withholding debited, the remainder banked. */
-function PostToLedger({ profileId }: { profileId: number }) {
+function PostToLedger({ profileId, disabled, onPending }: {
+  profileId: number; disabled: boolean; onPending: (pending: boolean) => void;
+}) {
   const { data: accounts } = useAccounts({ type: "asset" });
   const post = usePostPayslip();
   const [depositId, setDepositId] = useState<number | "">("");
   const [when, setWhen] = useState(localISODateTime(new Date()));
 
   const result = post.data;
+  useEffect(() => { onPending(post.isPending); }, [post.isPending, onPending]);
 
   return (
     <div className="post-payslip">
@@ -91,7 +100,7 @@ function PostToLedger({ profileId }: { profileId: number }) {
         </label>
         <button
           className="btn btn--primary"
-          disabled={depositId === "" || post.isPending}
+          disabled={disabled || depositId === "" || post.isPending}
           onClick={() =>
             post.mutate({
               id: profileId,
@@ -122,26 +131,31 @@ export function Salary() {
   const calculate = useCalculate();
   const save = useSaveProfile();
   const remove = useDeleteProfile();
+  const activate = useActivateProfile();
+  const [posting, setPosting] = useState(false);
 
   const [gross, setGross] = useState("");
   const [payPeriod, setPayPeriod] = useState<PayPeriod>("monthly");
   const [label, setLabel] = useState("Day job");
-  const [seeded, setSeeded] = useState(false);
+  const [loadedId, setLoadedId] = useState<number | null>(null);
 
-  // Adopt the active profile's inputs once, so the form and the breakdown it
-  // shows describe the same salary. Without this the box holds a placeholder
-  // while the table below reports the saved profile — two different numbers
-  // on screen claiming to be the same thing.
+  // A successful profile switch replaces both the inputs and displayed snapshot.
   useEffect(() => {
-    if (seeded || !active) return;
+    if (!active || active.id === loadedId) return;
     setGross(String(Number(active.gross_amount)));
     setPayPeriod(active.pay_period);
     setLabel(active.label);
-    setSeeded(true);
-  }, [active, seeded]);
+    calculate.reset();
+    setLoadedId(active.id);
+  }, [active, loadedId, calculate.reset]);
 
-  const preview = calculate.data;
-  const shown = preview ?? active?.breakdown;
+  const previewMatches = calculate.data != null &&
+    calculate.variables?.gross_amount === gross && calculate.variables?.pay_period === payPeriod;
+  const preview = previewMatches ? calculate.data : undefined;
+  const inputsMatchActive = active && Number(gross) === Number(active.gross_amount) &&
+    payPeriod === active.pay_period;
+  const shown = preview ?? (inputsMatchActive ? active.breakdown : undefined);
+  const busy = activate.isPending || save.isPending || remove.isPending || posting;
 
   const takeHome = useMemo(() => {
     if (!shown) return null;
@@ -175,7 +189,7 @@ export function Salary() {
               className="form-row"
               onSubmit={(e) => {
                 e.preventDefault();
-                calculate.mutate({ gross_amount: gross, pay_period: payPeriod });
+                if (!busy) calculate.mutate({ gross_amount: gross, pay_period: payPeriod });
               }}
             >
               <label className="field">
@@ -184,6 +198,7 @@ export function Salary() {
                   type="number"
                   step="0.01"
                   min="0"
+                  disabled={busy}
                   value={gross}
                   onChange={(e) => setGross(e.target.value)}
                   placeholder="42000"
@@ -193,14 +208,18 @@ export function Salary() {
               <label className="field">
                 <span className="eyebrow">Period</span>
                 <select
+                  disabled={busy}
                   value={payPeriod}
                   onChange={(e) => setPayPeriod(e.target.value as PayPeriod)}
                 >
                   <option value="monthly">Monthly</option>
+                  <option value="fortnightly">Fortnightly (every 2 weeks)</option>
                   <option value="annual">Annual</option>
                 </select>
               </label>
-              <button className="btn btn--primary">Calculate</button>
+              <button className="btn btn--primary" disabled={busy || calculate.isPending}>
+                Calculate
+              </button>
             </form>
 
             {shown && (
@@ -238,18 +257,22 @@ export function Salary() {
                 style={{ marginTop: 16 }}
                 onSubmit={(e) => {
                   e.preventDefault();
-                  save.mutate({ label, gross_amount: gross, pay_period: payPeriod });
+                  if (!busy && previewMatches) {
+                    save.mutate({ label, gross_amount: gross, pay_period: payPeriod });
+                  }
                 }}
               >
                 <label className="field field--wide">
                   <span className="eyebrow">Save as</span>
                   <input value={label} onChange={(e) => setLabel(e.target.value)} />
                 </label>
-                <button className="btn" disabled={save.isPending}>
+                <button className="btn" disabled={busy || calculate.isPending || !previewMatches}>
                   {save.isPending ? "Saving…" : "Save profile"}
                 </button>
               </form>
             )}
+            {calculate.isError && <div className="empty empty--error">{String(calculate.error)}</div>}
+            {save.isError && <div className="empty empty--error">{String(save.error)}</div>}
           </div>
         </section>
 
@@ -269,7 +292,13 @@ export function Salary() {
             </div>
             <div className="card__body">
               {active ? (
-                <PostToLedger profileId={active.id} />
+                <>
+                  <p className="eyebrow">
+                    Current profile: {active.label} · {PAY_PERIOD_LABEL[active.pay_period]}
+                  </p>
+                  <PostToLedger key={active.id} profileId={active.id}
+                    disabled={busy} onPending={setPosting} />
+                </>
               ) : (
                 <div className="empty">Save a profile first, then post it.</div>
               )}
@@ -285,20 +314,37 @@ export function Salary() {
                 <div className="empty">No profiles saved yet.</div>
               ) : (
                 <table className="ledger">
+                  <thead>
+                    <tr>
+                      <th>Profile</th>
+                      <th>Period</th>
+                      <th className="num">Gross salary</th>
+                      <th className="num">Net salary</th>
+                      <th>Delete</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {profiles.map((p) => (
-                      <tr key={p.id}>
+                      <tr key={p.id} className={p.is_active ? "profile-row profile-row--active" : "profile-row"}
+                        onClick={() => { if (!busy && !p.is_active) activate.mutate(p.id); }}>
                         <td>
-                          {p.label}
-                          {p.is_active && <span className="pill pill--sm">active</span>}
+                          <button className="linkish" disabled={busy} aria-pressed={p.is_active}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!p.is_active) activate.mutate(p.id);
+                            }}>{p.label}</button>
+                          {p.is_active && <span className="pill pill--sm">current</span>}
                         </td>
+                        <td>{PAY_PERIOD_LABEL[p.pay_period]}</td>
+                        <td className="num"><Money value={p.breakdown.gross_period} /></td>
                         <td className="num">
                           <Money value={p.breakdown.net_period} sign="credit" />
                         </td>
                         <td className="num">
                           <button
                             className="btn btn--ghost btn--sm"
-                            onClick={() => remove.mutate(p.id)}
+                            aria-label={`Delete ${p.label}`} disabled={busy}
+                            onClick={(e) => { e.stopPropagation(); remove.mutate(p.id); }}
                           >
                             ×
                           </button>
@@ -308,6 +354,9 @@ export function Salary() {
                   </tbody>
                 </table>
               )}
+              {activate.isPending && <p role="status">Switching current profile…</p>}
+              {activate.isError && <div className="empty empty--error">{String(activate.error)}</div>}
+              {remove.isError && <div className="empty empty--error">{String(remove.error)}</div>}
             </div>
           </section>
         </div>

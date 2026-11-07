@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  monthsForRange,
   useAnalyticsOverview,
   useEarnings,
   useMonthly,
@@ -13,11 +12,12 @@ import {
 import { BarChart } from "@/components/BarChart";
 import { LineChart } from "@/components/LineChart";
 import { Money } from "@/components/Money";
+import { PeriodFilter } from "@/components/PeriodFilter";
 import { StackedBarChart } from "@/components/StackedBarChart";
 import { WaterfallChart, type WaterfallStep } from "@/components/WaterfallChart";
 import { useChartPalette } from "@/lib/chartColors";
-import { money, moneyShort, percent, shortDate, signedPercent } from "@/lib/format";
-import { rangeBounds, timeRangeLabel, useFilters } from "@/store/filters";
+import { money, moneyShort, percent, shortDate, signedPercent, PER_PERIOD_LABEL } from "@/lib/format";
+import { rangeBounds, timeRangeLabel, useSectionPeriod } from "@/store/filters";
 import type { AccountTotal } from "@/lib/types";
 import { InfoNote } from "@/components/InfoNote";
 
@@ -178,13 +178,14 @@ function StaleBanner() {
 }
 
 export function Analytics() {
-  const timeRange = useFilters((s) => s.timeRange);
-  const { data: overview, isLoading } = useAnalyticsOverview();
-  const { data: prev } = usePreviousAnalyticsOverview();
+  const [timeRange, setTimeRange] = useSectionPeriod("analytics");
+  const bounds = rangeBounds(timeRange);
+  const { data: overview, isLoading } = useAnalyticsOverview(bounds);
+  const { data: prev } = usePreviousAnalyticsOverview(timeRange);
   const { data: earnings } = useEarnings();
-  const { data: monthly } = useMonthly();
-  const { data: mix } = useMonthlyByAccount(monthsForRange(timeRange));
-  const { data: balance } = useRunningBalance();
+  const { data: monthly } = useMonthly(bounds);
+  const { data: mix } = useMonthlyByAccount(bounds);
+  const { data: balance } = useRunningBalance(bounds);
   const palette = useChartPalette();
 
   const [activeAct, setActiveAct] = useState<string>("earned");
@@ -299,6 +300,7 @@ export function Analytics() {
         </h1>
       </div>
 
+      <PeriodFilter value={timeRange} onChange={setTimeRange} />
       <StaleBanner />
 
       {isLoading && <div className="empty">Crunching…</div>}
@@ -346,7 +348,7 @@ export function Analytics() {
                       </InfoNote>
                     </h3>
                     <span className="eyebrow">
-                      {earnings?.pay_period === "annual" ? "Per year" : "Per month"}
+                      {PER_PERIOD_LABEL[earnings?.pay_period ?? "monthly"]}
                     </span>
                   </div>
                   <div className="card__body">

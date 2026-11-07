@@ -11,21 +11,25 @@ from __future__ import annotations
 from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import case, func, select
+from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.deps import current_user
-from app.models.base import EntrySource
+from app.models.account import Account
+from app.models.base import AccountType, EntrySource
 from app.models.journal import JournalEntry, JournalLine
 from app.models.user import User
 from app.schemas import (
     JournalEntryCreate,
     JournalEntryOut,
+    JournalEntryPage,
     JournalEntryUpdate,
+    JournalEntryWithBalance,
     SimpleEntryCreate,
 )
 from app.services import journal as journal_svc
+from app.tax.models import money
 from app.warehouse import etl
 
 router = APIRouter(prefix="/ledger", tags=["ledger"])
@@ -70,6 +74,64 @@ def list_entries(
         )
     stmt = stmt.order_by(JournalEntry.occurred_at.desc(), JournalEntry.id.desc()).limit(limit)
     return db.execute(stmt).scalars().all()
+
+
+@router.get("/entries/page", response_model=JournalEntryPage)
+def entry_page(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    # Aggregate per entry before the window, so multi-line postings count once.
+    activity = (
+        select(
+            JournalEntry.id.label("entry_id"),
+            JournalEntry.occurred_at.label("occurred_at"),
+            func.sum(JournalLine.debit).label("posted"),
+            func.sum(
+                case(
+                    (Account.type == AccountType.ASSET, JournalLine.debit - JournalLine.credit),
+                    else_=0,
+                )
+            ).label("cash_change"),
+        )
+        .join(JournalLine, JournalLine.entry_id == JournalEntry.id)
+        .join(Account, Account.id == JournalLine.account_id)
+        .where(JournalEntry.user_id == user.id, JournalEntry.voided_at.is_(None))
+        .group_by(JournalEntry.id, JournalEntry.occurred_at)
+        .subquery()
+    )
+    total, posted_total = db.execute(
+        select(func.count(), func.coalesce(func.sum(activity.c.posted), 0)).select_from(activity)
+    ).one()
+    running = select(
+        activity.c.entry_id,
+        activity.c.occurred_at,
+        func.sum(activity.c.cash_change)
+        .over(order_by=(activity.c.occurred_at, activity.c.entry_id), rows=(None, 0))
+        .label("cash_balance"),
+    ).subquery()
+    rows = db.execute(
+        select(JournalEntry, running.c.cash_balance)
+        .join(running, running.c.entry_id == JournalEntry.id)
+        .options(selectinload(JournalEntry.lines))
+        .order_by(running.c.occurred_at.desc(), running.c.entry_id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return JournalEntryPage(
+        items=[
+            JournalEntryWithBalance(
+                **JournalEntryOut.model_validate(entry).model_dump(), cash_balance=money(balance)
+            )
+            for entry, balance in rows
+        ],
+        total=total,
+        posted_total=money(posted_total),
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/entries/{entry_id}", response_model=JournalEntryOut)

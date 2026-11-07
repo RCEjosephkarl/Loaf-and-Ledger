@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { previousRangeBounds, rangeBounds, useFilters, type TimeRange } from "@/store/filters";
+import { previousRangeBounds, type DateBounds, type TimeRange } from "@/store/filters";
 import type {
   Account,
   AccountBalances,
@@ -13,9 +13,9 @@ import type {
   DashboardSummary,
   EarningsResponse,
   EntryKind,
-  EntrySource,
   FundStatus,
   JournalEntry,
+  JournalEntryPage,
   JournalLineInput,
   Meta,
   MonthlyByAccountResponse,
@@ -27,7 +27,7 @@ import type {
   WarehouseStatus,
 } from "@/lib/types";
 
-/** Map the global time-range vocabulary to the backend's BudgetScope
+/** Map the frontend period vocabulary to the backend's BudgetScope
  * vocabulary ("this_month" -> "month", "last_3m" -> "3m"; ytd/all match). */
 export function toBudgetScope(range: TimeRange): BudgetScope {
   if (range === "this_month") return "month";
@@ -35,15 +35,9 @@ export function toBudgetScope(range: TimeRange): BudgetScope {
   return range;
 }
 
-/** Global filter params shared by dashboard/analytics/ledger reads. */
-export function useGlobalParams() {
-  const { accountId, timeRange } = useFilters();
-  const { start, end } = rangeBounds(timeRange);
-  return {
-    account_id: accountId ?? undefined,
-    start: start || undefined,
-    end: end || undefined,
-  };
+/** Include explicit date bounds in both requests and cache keys. */
+function dateParams(bounds: DateBounds = {}) {
+  return { start: bounds.start || undefined, end: bounds.end || undefined };
 }
 
 // ---- meta ----
@@ -61,10 +55,12 @@ export const useAccounts = (opts?: { includeArchived?: boolean; type?: AccountTy
       }),
   });
 
-export const useAccountBalances = () =>
+export const useAccountBalances = (bounds: DateBounds = {}, includeArchived = false) =>
   useQuery({
-    queryKey: ["accounts", "balances"],
-    queryFn: () => api.get<AccountBalances>("/accounts/balances"),
+    queryKey: ["accounts", "balances", dateParams(bounds), includeArchived],
+    queryFn: () => api.get<AccountBalances>("/accounts/balances", {
+      ...dateParams(bounds), include_archived: includeArchived,
+    }),
   });
 
 export const useCreateAccount = () => {
@@ -124,28 +120,10 @@ function useLedgerMutation<TInput, TResult>(fn: (input: TInput) => Promise<TResu
   });
 }
 
-export const useEntries = (opts?: { source?: EntrySource; includeVoided?: boolean }) => {
-  const p = useGlobalParams();
-  const params = { ...p, source: opts?.source, include_voided: opts?.includeVoided };
-  return useQuery({
-    queryKey: ["entries", params],
-    queryFn: () => api.get<JournalEntry[]>("/ledger/entries", params),
-  });
-};
-
-/** Every entry ever recorded, ignoring the global range — the Ledger page's
- * running-balance column has to span the whole history to mean anything. */
-export const useAllEntries = () => {
-  const accountId = useFilters((s) => s.accountId);
-  return useQuery({
-    queryKey: ["entries", "all", accountId],
-    queryFn: () =>
-      api.get<JournalEntry[]>("/ledger/entries", {
-        account_id: accountId ?? undefined,
-        limit: 2000,
-      }),
-  });
-};
+export const useEntryPage = (page: number) => useQuery({
+  queryKey: ["entries", "page", page],
+  queryFn: () => api.get<JournalEntryPage>("/ledger/entries/page", { page, page_size: 10 }),
+});
 
 export interface SimpleEntryInput {
   kind: EntryKind;
@@ -224,6 +202,19 @@ export const useSaveProfile = () => {
   });
 };
 
+export const useActivateProfile = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.post<SalaryProfile>(`/salary/profiles/${id}/activate`),
+    onSuccess: (profile) => {
+      qc.setQueryData(["salary", "active"], profile);
+      qc.invalidateQueries({ queryKey: ["salary"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["analytics"] });
+    },
+  });
+};
+
 export const useDeleteProfile = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -245,16 +236,16 @@ export const usePostPayslip = () =>
   );
 
 // ---- F3 analytics / F6 dashboard (all served from the warehouse) ----
-export const useDashboard = () => {
-  const p = useGlobalParams();
+export const useDashboard = (bounds: DateBounds) => {
+  const p = dateParams(bounds);
   return useQuery({
     queryKey: ["dashboard", p],
     queryFn: () => api.get<DashboardSummary>("/dashboard/summary", p),
   });
 };
 
-export const useAnalyticsOverview = () => {
-  const p = useGlobalParams();
+export const useAnalyticsOverview = (bounds: DateBounds) => {
+  const p = dateParams(bounds);
   return useQuery({
     queryKey: ["analytics", "overview", p],
     queryFn: () => api.get<AnalyticsOverview>("/analytics/overview", p),
@@ -263,14 +254,12 @@ export const useAnalyticsOverview = () => {
 
 /** The same endpoint over the immediately prior period of equal length —
  * powers every "Δ vs prior" comparison. */
-export const usePreviousAnalyticsOverview = () => {
-  const { accountId, timeRange } = useFilters();
+export const usePreviousAnalyticsOverview = (timeRange: TimeRange) => {
   const prev = previousRangeBounds(timeRange);
   return useQuery({
-    queryKey: ["analytics", "overview", "previous", accountId, timeRange],
+    queryKey: ["analytics", "overview", "previous", prev],
     queryFn: () =>
       api.get<AnalyticsOverview>("/analytics/overview", {
-        account_id: accountId ?? undefined,
         start: prev?.start,
         end: prev?.end,
       }),
@@ -278,44 +267,24 @@ export const usePreviousAnalyticsOverview = () => {
   });
 };
 
-/** How many trailing months the monthly charts should request for each preset,
- * so the chart's span tracks the selected scope instead of a fixed 6. */
-export function monthsForRange(range: TimeRange): number {
-  switch (range) {
-    case "this_month":
-      return 6; // trailing context around the selected month
-    case "last_3m":
-      return 3;
-    case "ytd":
-      return new Date().getMonth() + 1; // Jan..current month
-    case "all":
-      return 36; // the backend's own Query(..., le=36) ceiling
-  }
-}
-
-export const useMonthly = () => {
-  const timeRange = useFilters((s) => s.timeRange);
-  const months = monthsForRange(timeRange);
+export const useMonthly = (bounds: DateBounds) => {
+  const params = dateParams(bounds);
   return useQuery({
-    queryKey: ["analytics", "monthly", months],
-    queryFn: () =>
-      api.get<{ currency: string; series: MonthlyPoint[] }>("/analytics/monthly", { months }),
+    queryKey: ["analytics", "monthly", params],
+    queryFn: () => api.get<{ currency: string; series: MonthlyPoint[] }>("/analytics/monthly", params),
   });
 };
 
-export const useMonthlyByAccount = (months: number, flow: "inflow" | "outflow" = "outflow") =>
-  useQuery({
-    queryKey: ["analytics", "monthly-by-account", months, flow],
-    queryFn: () =>
-      api.get<MonthlyByAccountResponse>("/analytics/monthly-by-account", { months, flow }),
+export const useMonthlyByAccount = (bounds: DateBounds, flow: "inflow" | "outflow" = "outflow") => {
+  const params = { ...dateParams(bounds), flow };
+  return useQuery({
+    queryKey: ["analytics", "monthly-by-account", params],
+    queryFn: () => api.get<MonthlyByAccountResponse>("/analytics/monthly-by-account", params),
   });
+};
 
-/** Cumulative daily net cash flow. Defaults to the global range; pass an
- * explicit `{start,end}` so a page can drive it from its own period. */
-export const useRunningBalance = (override?: { start?: string | null; end?: string | null }) => {
-  const timeRange = useFilters((s) => s.timeRange);
-  const { start, end } = override ?? rangeBounds(timeRange);
-  const params = { start: start || undefined, end: end || undefined };
+export const useRunningBalance = (bounds: DateBounds) => {
+  const params = dateParams(bounds);
   return useQuery({
     queryKey: ["analytics", "running-balance", params],
     queryFn: () => api.get<RunningBalanceResponse>("/analytics/running-balance", params),

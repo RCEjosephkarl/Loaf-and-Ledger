@@ -6,6 +6,10 @@ in plain language.*
 
 **Release:** `v0.2.0` (2026-09-09) · **Target:** Local, self-hosted, single-user, PHP (`₱`) only
 
+Current development is recorded under [Unreleased](CHANGELOGS.md#unreleased).
+For the clean test baseline and backup/recovery instructions, see
+[UI/UX testing](docs/UI_UX_TESTING.md).
+
 ---
 
 ## Abstract
@@ -78,7 +82,7 @@ recorded in [`CHANGELOGS.md`](./CHANGELOGS.md):
 | **Color & Accessibility** | CVD-validated 8-slot categorical palette | Validated with colour-vision deficiency simulation on both light and dark themes (CVD dE 9.1 light / 8.4 dark; normal vision dE 19.6 / 19.3). Semantic financial roles (credit, debit, good, warn) are reserved and never cycled into series colors. |
 | **Auth** | None (single implicit user) | Scoped as a personal, local, self-hosted tool. User models retain foreign-key relationships to support an app-password seam without schema overhaul. |
 | **Insights** | Deterministic rule-based heuristics | Transparent, explainable, and verifiable by hand. No external AI dependencies or statistical black boxes for financial advice. |
-| **Frontend state** | TanStack Query (server state) + Zustand (global filters) | Read-heavy and cache-friendly. A single Zustand store manages time-range, account filter, and theme, cascading automatically to all query hooks. |
+| **Frontend state** | TanStack Query (server state) + Zustand (section preferences) | Read-heavy and cache-friendly. Zustand persists independent Dashboard, Accounts, and Analytics periods plus theme. Query hooks receive explicit date bounds; Budgets uses the current month and Ledger spans all dates. |
 | **Datastores** | SQLite (dev) / PostgreSQL (prod) for OLTP; DuckDB for OLAP | Zero-configuration local startup with SQLite; production keeps indexable JSONB via SQLAlchemy type variants. `DATABASE_URL` and `WAREHOUSE_PATH` configure each datastore independently. |
 
 ---
@@ -89,7 +93,7 @@ Two stores, two jobs. The write-through ETL arrow between them forms the backbon
 
 ```
         ┌───────────────────── frontend/ (Vite + React + TS) ─────────────────────┐
-        │  Zustand { timeRange, accountId, theme } ─ cascades to every read        │
+        │  Zustand { periods by section, theme } ─ explicit query dates          │
         │  TanStack Query hooks ───────────────▶  /api/v1/*                        │
         └────────────────────────────────────┬────────────────────────────────────┘
                                              │ (Vite dev proxy)
@@ -165,10 +169,10 @@ The DuckDB OLAP warehouse models financial history across four dimensions, two f
 |---|---|---|
 | **Accounts** | `GET /accounts`<br>`POST /accounts`<br>`PATCH /accounts/{id}`<br>`DELETE /accounts/{id}`<br>`GET /accounts/balances` | Chart of accounts CRUD, soft archiving (`DELETE`), and point-in-time normal balance aggregation. |
 | **Payees** | `GET /payees`<br>`POST /payees` | Payee directory for transaction tagging. |
-| **F1 Salary** | `POST /salary/calculate`<br>`GET /salary/profiles`<br>`POST /salary/profiles`<br>`PATCH /salary/profiles/{id}`<br>`DELETE /salary/profiles/{id}`<br>**`POST /salary/profiles/{id}/post`** | Gross-to-net tax calculation, profile management, and **one-click idempotent payslip posting** to the journal. |
-| **F2 Ledger** | `GET /ledger/entries`<br>`POST /ledger/entries`<br>`GET /ledger/entries/{id}`<br>`PATCH /ledger/entries/{id}`<br>`DELETE /ledger/entries/{id}`<br>`POST /ledger/entries/simple` | Complete journal CRUD, soft-voiding (`DELETE`), and two-line quick entry posting. |
+| **F1 Salary** | `POST /salary/calculate`<br>`GET /salary/profiles`<br>`GET /salary/profiles/active`<br>`POST /salary/profiles`<br>`POST /salary/profiles/{id}/activate`<br>`DELETE /salary/profiles/{id}`<br>**`POST /salary/profiles/{id}/post`** | Gross-to-net tax calculation, profile management, and **one-click idempotent payslip posting** to the journal. |
+| **F2 Ledger** | `GET /ledger/entries`<br>`GET /ledger/entries/page`<br>`POST /ledger/entries`<br>`GET /ledger/entries/{id}`<br>`PATCH /ledger/entries/{id}`<br>`DELETE /ledger/entries/{id}`<br>`POST /ledger/entries/simple` | Complete journal CRUD, soft-voiding (`DELETE`), and two-line quick entry posting. |
 | **F3 Analytics** | `GET /analytics/overview`<br>`GET /analytics/monthly`<br>`GET /analytics/monthly-by-account`<br>`GET /analytics/running-balance`<br>`GET /analytics/earnings` | DuckDB OLAP queries: multi-act financial summary, stacked mix, cashflow series, and waterfall items. |
-| **F4 Budgets** | `GET /budgets`<br>`POST /budgets`<br>`PATCH /budgets/{id}`<br>`DELETE /budgets/{id}`<br>`GET /budgets/status`<br>`GET /budgets/fund`<br>`POST /budgets/fund`<br>`DELETE /budgets/fund` | Expense account budget limits, multi-month period status, and period initial fund tracking with carryover. |
+| **F4 Budgets** | `GET /budgets`<br>`POST /budgets`<br>`DELETE /budgets/{id}`<br>`GET /budgets/status`<br>`GET /budgets/fund`<br>`POST /budgets/fund`<br>`DELETE /budgets/fund` | Expense account budget limits, multi-month period status, and period initial fund tracking with carryover. |
 | **F5 Export** | `GET /export/ledger.csv`<br>`GET /export/trial-balance.csv` | Streamed CSVs: granular journal lines (`ledger.csv`) and verified debit/credit balance proofs (`trial-balance.csv`). |
 | **F6 Dashboard** | `GET /dashboard/summary` | Balance sheet highlight summary, top expense accounts, and deterministic insights. |
 | **Warehouse** | `GET /warehouse/status`<br>`POST /warehouse/rebuild` | OLTP-to-OLAP drift checking, integrity verification, and in-process warehouse truncation and reload. |
@@ -176,11 +180,28 @@ The DuckDB OLAP warehouse models financial history across four dimensions, two f
 
 ---
 
+### Section date ranges and ledger pages
+
+Dashboard, Accounts, and Analytics have independent period controls. Monthly analytics accept
+inclusive `start`/`end` dates, filter before grouping, and include empty calendar months.
+Date bounds override the legacy `months` parameter. Omitting both date bounds and
+`months` returns complete history.
+Daily running-balance responses fill empty days and carry forward the historical balance.
+
+`GET /accounts/balances?start=YYYY-MM-DD&end=YYYY-MM-DD` returns period debit/credit
+activity and closing balances through `end`, including earlier postings. Legacy unfiltered
+and `as_of` timestamp requests remain available.
+
+`GET /ledger/entries/page?page=1&page_size=10` returns `items`, `total`, `posted_total`,
+`page`, and `page_size`. Each item includes `cash_balance` computed before pagination across
+all non-voided asset postings, including archived accounts. Entries sort newest first by
+posting timestamp and ID. The original list and CSV endpoints remain available.
+
 ## 4. Method: the tax engine & payslip posting
 
 The tax engine (`app/tax/`) implements a strategy interface:
 ```python
-compute_annual(gross: Decimal, year: int) -> Breakdown
+def compute_annual(self, gross_annual: Decimal, year: int) -> Breakdown: ...
 ```
 The Philippine regime (`app/tax/regions/ph.py`) encodes TRAIN law brackets, SSS contribution tables,
 PhilHealth percentage deductions, and Pag-IBIG statutory caps:
@@ -222,16 +243,19 @@ preventing double-posting even if clicked repeatedly or retried over the network
 
 ## 5. Results: what the app does
 
-Loaf & Ledger delivers six cohesive, end-to-end modules styled with the *"Ledger & Crust"* design system:
-warm crust-brown structural accents, flour/crumb card backgrounds, faint greenbar tabular row striping,
-monospaced financial tables, and the accountant's double underline for net balances.
+Loaf & Ledger delivers six modules styled with the **Blue Ink** design system:
+blue structural accents, cool paper/card surfaces, alternating table rows,
+and monospaced financial figures.
 
 Contextual **`InfoNote` popovers** replace bulky explanatory paragraphs throughout the UI, keeping
 screens clean and figures above the fold while remaining accessible via hover, click/pin, and keyboard navigation.
 
 ### 01 · Dashboard — "Where the dough goes"
-- **Crust Highlight Card:** The central balance sheet summary card displaying Credits in, Debits out,
+- **Blue Highlight Card:** The central balance sheet summary card displaying Credits in, Debits out,
   and Net cashflow with double-underline emphasis, accompanied by net worth and transfer volume.
+- **Responsive Cards:** Four summary columns at 1200px and above, two at 900–1199px,
+  and one below 900px. Desktop charts and supporting cards appear in pairs; long tables
+  scroll locally with sticky headers.
 - **Transfers Highlight:** Explicitly surfaces money *"moved rather than spent"*, making saving visible.
 - **Plain-Language Insights:** Deterministic heuristics highlighting spending velocity, runway,
   statutory deduction load, and spending concentration.
@@ -239,15 +263,21 @@ screens clean and figures above the fold while remaining accessible via hover, c
 - **Top Outflows:** Ranked expense accounts for the selected time horizon.
 
 ### 02 · Salary — "What survives to net"
-- **Interactive Calculator:** Enter gross pay (monthly or annual) to preview SSS, PhilHealth,
-  Pag-IBIG, BIR withholding, net take-home, and effective deduction rates.
-- **Profile Snapshots:** Save configurations as persistent profiles for instant reference.
+- **Interactive Calculator:** Enter monthly, fortnightly (26 payments/year), or annual gross
+  pay to preview SSS, PhilHealth, Pag-IBIG, BIR withholding, net take-home, and each
+  deduction's percentage of gross.
+- **Profile Snapshots:** Select a saved profile to make it current for calculation and
+  ledger posting. Gross and net columns use its pay period. New periodic snapshots
+  derive net pay after rounding individual deductions to cents; earlier snapshots remain intact.
 - **One-Click Ledger Posting:** Designate an asset account (e.g. Payroll Bank) and post the payslip
   directly into the journal as a balanced 6-line entry with full idempotency guards.
 
 ### 03 · Accounts — "Every pocket, named"
 - **Chart of Accounts:** Grouped into Assets (1xxx), Liabilities (2xxx), Equity (3xxx), Income (4xxx),
   Expenses (5xxx), and Statutory Deductions (6xxx).
+- **Section Controls:** Add an account appears first. Overview and account groups expand
+  or collapse independently. The local period controls debit/credit activity while closing
+  balances include all earlier postings through the selected end date.
 - **Derived Real-Time Balances:** Every balance is calculated dynamically from journal lines according
   to normal-balance conventions (assets/expenses debit-normal; liabilities/equity/income credit-normal).
 - **Safe Archiving:** Accounts with historical postings cannot be hard-deleted; archiving them
@@ -262,14 +292,18 @@ screens clean and figures above the fold while remaining accessible via hover, c
   part-payments, manual payroll) with a live debits-vs-credits balance meter that gates submission
   until `SUM(debits) = SUM(credits)`.
 - **Full Historical Running Balance:** A continuous cash balance column spanning the entire ledger
-  history rather than artificially resetting at window boundaries.
-- **Soft Voiding:** Voiding an entry preserves the row with visual strikethrough and void badge.
+  history, including archived asset accounts, before the entries are paginated.
+- **Ten-Entry Pages:** Previous/Next navigation with all-history totals, page reset after
+  posting, last-page adjustment after voiding, and retry controls on load failure.
+- **Soft Voiding:** Voiding preserves the database record and removes it from the default
+  list and calculations. API callers can request voided entries with `include_voided=true`.
 - **Ledger Export:** Stream the entire journal as CSV (`/export/ledger.csv`) at one row per journal line.
 
 ### 05 · Budgets — "Limits, and how close you are"
 - **Category Limits:** Set monthly limits across expense accounts with progress tracks that shift
   from green to amber to red when exceeding 100% utilization.
-- **Flexible Scopes:** Switch between Month, 3 Months, YTD, and All period scopes.
+- **Current Month:** The Budgets page always shows the current month. Backend APIs retain
+  Month, 3 Months, YTD, and All scopes for explicit callers.
 - **Initial Fund Tracking:** Tracks starting balance for a period, defaulting to prior cumulative
   cashflow with user override capability (`/budgets/fund`).
 - **Warehouse-Backed:** Budget spend queries DuckDB directly, ensuring zero discrepancy with Analytics.
@@ -289,9 +323,9 @@ smooth scrolling, and prose-led ledes featuring live data figures:
   a one-click in-process **Rebuild warehouse** button.
 
 ### Design System & Color Accessibility
-- **The "Ledger & Crust" Aesthetic:** A tactile aesthetic balancing baker's warmth and accountant's rigor.
-  Structural primary color is crust brown; card backgrounds use flour and crumb tones; money tables feature
-  monospace tabular numerals, faint greenbar alternating row striping, and the classic double underline for totals.
+- **Blue Ink:** Blue accents on cool paper surfaces, with light, dark, and system themes.
+  Money tables use monospaced tabular numerals and alternating rows. The balance chart
+  uses a blue line with a translucent fill; red and green retain their financial meanings.
 - **CVD-Validated 8-Slot Palette:** Categorical chart hues are assigned in a fixed order and never cycled;
   a ninth category folds into "Other". Palette contrast was validated with colour-vision deficiency simulations
   against the application's actual chart surfaces across both light and dark themes (light: CVD $\Delta E$ 9.1,
@@ -319,18 +353,27 @@ and user flows:
   - `test_transfers.py`: Confirms internal transfers alter account balances without impacting expense totals or distorting savings rates.
   - `test_seed_cli.py`: Verifies that CLI tools detect DuckDB file locks cleanly when the API server is active and output clear remediation guidance.
   - `test_api.py`: Validates API endpoints and pins down the window-bounded savings rate calculation.
+  - `test_section_behaviors.py`: Date-bound activity versus closing balances, empty calendar
+    periods, full-history charts, fortnightly rounding and profile activation, and pagination
+    across more than 2,000 entries, including archived accounts and voided postings.
+  - `test_salary_migration.py`: SQLite upgrade/downgrade, snapshot preservation, and the
+    downgrade guard for existing fortnightly profiles.
 - **End-to-End & Static Analysis:** Headless SPA verification across light and dark themes, strict TypeScript compilation, and zero lint warnings.
 
 ```bash
-# Run the test suite (105 tests passing)
-cd backend && uv run pytest        # or: ./.venv/bin/pytest
+# Run the test suite (121 passed in the 2026-11-07 validation)
+(cd backend && uv run pytest)        # or use .venv/bin/pytest inside backend/
 
 # Lint backend code
-cd backend && uv run ruff check .  # or: ./.venv/bin/ruff check .
+(cd backend && uv run ruff check .)  # or use .venv/bin/ruff inside backend/
 
 # Validate frontend types and build production bundle
-cd frontend && npm run build
+(cd frontend && npm run build)
 ```
+
+SQLite migration behavior was tested against disposable databases. PostgreSQL upgrade SQL
+was generated and inspected; the migration has not been executed against a PostgreSQL
+instance in this validation. See [migration notes](backend/migrations/README).
 
 ---
 
@@ -368,15 +411,16 @@ Loaf-and-Ledger/
 │   ├── migrations/        Alembic migrations
 │   └── tests/
 │       ├── unit/          test_journal · test_balances · test_payslip · test_tax_engine · test_budget_periods
-│       └── integration/   test_warehouse_sync · test_warehouse_rebuild · test_transfers · test_seed_cli · test_api
+│       └── integration/   API · warehouse · transfers · seed CLI · section behaviors · salary migration
 ├── frontend/
 │   ├── src/
 │   │   ├── api/           client endpoints
-│   │   ├── components/    Brand · FilterBar · HighlightCard · InfoNote · Layout · Money · WaterfallChart · Charts
+│   │   ├── components/    Brand · FilterBar · PeriodFilter · HighlightCard · InfoNote · Layout · Money · Charts
 │   │   ├── pages/         Dashboard · Salary · Accounts · Ledger · Budgets · Analytics
-│   │   ├── store/         Zustand filter store (timeRange, accountId, theme)
+│   │   ├── store/         Zustand section-period and theme preferences
 │   │   └── lib/           CVD-validated chart colors & utilities
 │   ├── package.json · tsconfig.json · vite.config.ts
+├── docs/UI_UX_TESTING.md  clean baseline · smoke tests · backup/recovery
 ├── README.md · WALKTHROUGH.md · CHANGELOGS.md
 ```
 
@@ -385,7 +429,7 @@ Loaf-and-Ledger/
 ## 9. Getting started
 
 ### Prerequisites
-- **Python 3.12+**
+- **Python 3.12** (the backend requires `>=3.12,<3.13`)
 - **Node.js 20+**
 - [`uv`](https://github.com/astral-sh/uv) (recommended) or standard `pip`/`venv`
 
@@ -399,21 +443,26 @@ uv sync --extra dev
 
 # Run Alembic migrations to build the OLTP schema
 uv run alembic upgrade head
+```
 
-# Seed the PH chart of accounts, PHP demo entries, and initial warehouse load
-uv run python -m app.seed
+Run backend commands from `backend/`: the default SQLite and DuckDB paths are relative to
+the working directory. Running from the repository root can open a different database.
 
-# Start the FastAPI server (serves http://localhost:8000)
+The local database reset on 2026-11-07 already contains its user and 36 zero-balance accounts;
+run migrations and start the servers to continue testing. On a **new database**, initialize
+the clean chart before starting the API using the [clean setup instructions](WALKTHROUGH.md#clean-database-setup).
+
+Then start the API from `backend/`:
+
+```bash
 uv run uvicorn app.main:app --reload
 ```
 
-> **Note on Seeding:** Run `python -m app.seed` **before** starting uvicorn. Because DuckDB is
-> single-writer, an active uvicorn process holds `warehouse.duckdb`. If the server is already running,
-> the seed will commit the ledger half and instruct you to run:
-> ```bash
-> curl -X POST localhost:8000/api/v1/warehouse/rebuild
-> ```
-> which triggers an in-process reload without downtime.
+For optional sample transactions, run `uv run python -m app.seed` with the API stopped.
+After a clean reset, this command **repopulates demo financial data**. It is not a reset or
+a chart-only initializer. DuckDB permits one writer process; if the API is running, use
+`POST /api/v1/warehouse/rebuild` to reload its warehouse in-process instead of opening a
+second writer. See [backend operations](backend/README.md).
 
 ### Step 2: Launch Frontend
 

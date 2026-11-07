@@ -36,7 +36,7 @@ class AccountBalance:
 
 
 def _posting_totals(
-    db: Session, user_id: int, *, as_of: datetime | None = None
+    db: Session, user_id: int, *, as_of: datetime | None = None, start: datetime | None = None
 ) -> dict[int, tuple[Decimal, Decimal]]:
     """(debits, credits) per account across all non-voided entries."""
     stmt: Select = (
@@ -51,6 +51,8 @@ def _posting_totals(
     )
     if as_of is not None:
         stmt = stmt.where(JournalEntry.occurred_at <= as_of)
+    if start is not None:
+        stmt = stmt.where(JournalEntry.occurred_at >= start)
     return {
         account_id: (Decimal(str(debits)), Decimal(str(credits)))
         for account_id, debits, credits in db.execute(stmt).all()
@@ -69,9 +71,11 @@ def account_balances(
     user_id: int,
     *,
     as_of: datetime | None = None,
+    start: datetime | None = None,
     include_archived: bool = False,
 ) -> list[AccountBalance]:
     totals = _posting_totals(db, user_id, as_of=as_of)
+    activity = _posting_totals(db, user_id, as_of=as_of, start=start) if start else totals
     stmt = select(Account).where(Account.user_id == user_id)
     if not include_archived:
         stmt = stmt.where(Account.archived_at.is_(None))
@@ -80,6 +84,7 @@ def account_balances(
     out: list[AccountBalance] = []
     for account in accounts:
         debits, credits = totals.get(account.id, (ZERO, ZERO))
+        period_debits, period_credits = activity.get(account.id, (ZERO, ZERO))
         out.append(
             AccountBalance(
                 account_id=account.id,
@@ -88,8 +93,8 @@ def account_balances(
                 type=account.type,
                 subtype=account.subtype,
                 is_active=account.is_active,
-                debits=money(debits),
-                credits=money(credits),
+                debits=money(period_debits),
+                credits=money(period_credits),
                 balance=signed_balance(account.type, debits, credits),
             )
         )

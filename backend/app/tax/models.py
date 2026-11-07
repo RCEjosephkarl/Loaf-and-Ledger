@@ -6,6 +6,14 @@ from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 
 CENTS = Decimal("0.01")
+PERIOD_FACTORS = {"annual": Decimal("1"), "monthly": Decimal("12"), "fortnightly": Decimal("26")}
+
+
+def period_factor(pay_period: str) -> Decimal:
+    try:
+        return PERIOD_FACTORS[pay_period]
+    except KeyError as exc:
+        raise ValueError(f"Unknown pay period: {pay_period}") from exc
 
 
 def money(value: Decimal | int | float | str) -> Decimal:
@@ -49,7 +57,7 @@ class Breakdown:
 
     @property
     def period_factor(self) -> Decimal:
-        return Decimal("12") if self.pay_period == "monthly" else Decimal("1")
+        return period_factor(self.pay_period)
 
     @property
     def effective_rate(self) -> Decimal:
@@ -63,16 +71,26 @@ class Breakdown:
 
     def to_dict(self) -> dict:
         factor = self.period_factor
+        items = [i.to_dict(factor) for i in self.items]
+        gross_period = self.periodic(self.gross_annual)
+        deductions = sum(
+            (Decimal(i["amount_period"]) for i in items if i["kind"] in ("tax", "social")),
+            Decimal("0"),
+        )
+        net_period = money(gross_period - deductions)
+        for item in items:
+            if item["kind"] == "net":
+                item["amount_period"] = str(net_period)
         return {
             "tax_year": self.tax_year,
             "pay_period": self.pay_period,
             "gross_annual": str(money(self.gross_annual)),
             "net_annual": str(money(self.net_annual)),
-            "gross_period": str(self.periodic(self.gross_annual)),
-            "net_period": str(self.periodic(self.net_annual)),
+            "gross_period": str(gross_period),
+            "net_period": str(net_period),
             "total_tax": str(money(self.total_tax)),
             "total_social": str(money(self.total_social)),
             "total_deductions": str(money(self.total_deductions)),
             "effective_rate": str(self.effective_rate),
-            "items": [i.to_dict(factor) for i in self.items],
+            "items": items,
         }

@@ -1,7 +1,7 @@
 export type AccountType = "asset" | "liability" | "equity" | "income" | "expense";
 export type FlowClass = "inflow" | "outflow" | "balance";
 export type EntrySource = "manual" | "payslip" | "opening" | "transfer" | "import";
-export type PayPeriod = "monthly" | "annual";
+export type PayPeriod = "monthly" | "fortnightly" | "annual";
 export type BudgetScope = "month" | "3m" | "ytd" | "all";
 /** What the quick-entry form posts. The full journal grid posts lines directly. */
 export type EntryKind = "income" | "expense" | "transfer";
@@ -81,6 +81,18 @@ export interface JournalEntry {
   source_ref: string | null;
   voided_at: string | null;
   lines: JournalLine[];
+}
+
+export interface JournalEntryWithBalance extends JournalEntry {
+  cash_balance: string;
+}
+
+export interface JournalEntryPage {
+  items: JournalEntryWithBalance[];
+  total: number;
+  posted_total: string;
+  page: number;
+  page_size: number;
 }
 
 export interface JournalLineInput {

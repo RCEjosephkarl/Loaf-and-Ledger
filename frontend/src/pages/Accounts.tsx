@@ -9,6 +9,8 @@ import { Money } from "@/components/Money";
 import { exportTrialBalanceUrl } from "@/lib/api";
 import { ACCOUNT_TYPE_LABEL, ACCOUNT_TYPE_ORDER, money } from "@/lib/format";
 import type { AccountBalance, AccountType } from "@/lib/types";
+import { PeriodFilter } from "@/components/PeriodFilter";
+import { rangeBounds, useSectionPeriod } from "@/store/filters";
 import { InfoNote } from "@/components/InfoNote";
 
 /** What each type's balance means in plain words — a chart of accounts is
@@ -17,8 +19,8 @@ const TYPE_BLURB: Record<string, string> = {
   asset: "What you have — cash, bank, wallets, investments.",
   liability: "What you owe. A positive balance here is debt outstanding.",
   equity: "The opening position your books started from.",
-  income: "What you've earned, cumulative since records began.",
-  expense: "What you've spent, cumulative since records began.",
+  income: "What you've earned, through the selected closing date.",
+  expense: "What you've spent, through the selected closing date.",
 };
 
 function TypeGroup({ type, rows }: { type: AccountType; rows: AccountBalance[] }) {
@@ -27,25 +29,25 @@ function TypeGroup({ type, rows }: { type: AccountType; rows: AccountBalance[] }
   if (!rows.length) return null;
 
   return (
-    <section className="card">
-      <div className="card__head">
+    <details className="card account-group" open>
+      <summary className="card__head">
         <h3>
           {ACCOUNT_TYPE_LABEL[type]}
           <InfoNote label={`About ${ACCOUNT_TYPE_LABEL[type].toLowerCase()}`}>
             <p>{TYPE_BLURB[type]}</p>
           </InfoNote>
         </h3>
-        <span className="eyebrow">{rows.length} accounts</span>
-      </div>
+        <span className="eyebrow">{rows.length} accounts · {money(total)} closing</span>
+      </summary>
       <div className="card__body">
         <table className="ledger">
           <thead>
             <tr>
               <th className="col-code">Code</th>
               <th>Account</th>
-              <th className="num">Debits</th>
-              <th className="num">Credits</th>
-              <th className="num">Balance</th>
+              <th className="num">Period debits</th>
+              <th className="num">Period credits</th>
+              <th className="num">Closing balance</th>
               <th />
             </tr>
           </thead>
@@ -86,7 +88,7 @@ function TypeGroup({ type, rows }: { type: AccountType; rows: AccountBalance[] }
           </tfoot>
         </table>
       </div>
-    </section>
+    </details>
   );
 }
 
@@ -152,7 +154,9 @@ function NewAccountForm() {
 }
 
 export function Accounts() {
-  const { data: balances, isLoading } = useAccountBalances();
+  const [timeRange, setTimeRange] = useSectionPeriod("accounts");
+  const bounds = rangeBounds(timeRange);
+  const { data: balances, isLoading, isError, error } = useAccountBalances(bounds);
   const { data: accounts } = useAccounts();
 
   const byType = useMemo(() => {
@@ -183,49 +187,57 @@ export function Accounts() {
         </h1>
       </div>
 
+      <NewAccountForm />
+      <PeriodFilter value={timeRange} onChange={setTimeRange} />
       {isLoading && <div className="empty">Reading the books…</div>}
+      {isError && <div className="empty empty--error">{String(error)}</div>}
 
       {balances && (
         <>
-          <section className="stat-grid" style={{ marginBottom: 20 }}>
-            <div className="card stat">
-              <span className="eyebrow">Net worth</span>
-              <div className="stat__value">
-                <Money
-                  value={balances.net_worth}
-                  sign={Number(balances.net_worth) >= 0 ? "credit" : "debit"}
-                />
+          <details className="card account-overview" open>
+            <summary className="card__head">
+              <h3>Overview</h3>
+              <span className="eyebrow">Closing {bounds.end ?? "across all dates"}</span>
+            </summary>
+            <section className="stat-grid card__body">
+              <div className="card stat">
+                <span className="eyebrow">Net worth</span>
+                <div className="stat__value">
+                  <Money
+                    value={balances.net_worth}
+                    sign={Number(balances.net_worth) >= 0 ? "credit" : "debit"}
+                  />
+                </div>
+                <span className="stat__sub muted">Assets less liabilities</span>
               </div>
-              <span className="stat__sub muted">Assets less liabilities</span>
-            </div>
-            <div className="card stat">
-              <span className="eyebrow">Assets</span>
-              <div className="stat__value">
-                <Money value={assets.toFixed(2)} sign="credit" />
+              <div className="card stat">
+                <span className="eyebrow">Assets</span>
+                <div className="stat__value">
+                  <Money value={assets.toFixed(2)} sign="credit" />
+                </div>
+                <span className="stat__sub muted">{byType.get("asset")?.length ?? 0} accounts</span>
               </div>
-              <span className="stat__sub muted">{byType.get("asset")?.length ?? 0} accounts</span>
-            </div>
-            <div className="card stat">
-              <span className="eyebrow">Liabilities</span>
-              <div className="stat__value">
-                <Money value={liabilities.toFixed(2)} sign={liabilities > 0 ? "debit" : "credit"} />
+              <div className="card stat">
+                <span className="eyebrow">Liabilities</span>
+                <div className="stat__value">
+                  <Money value={liabilities.toFixed(2)} sign={liabilities > 0 ? "debit" : "credit"} />
+                </div>
+                <span className="stat__sub muted">What you owe</span>
               </div>
-              <span className="stat__sub muted">What you owe</span>
-            </div>
-            <div className="card stat">
-              <span className="eyebrow">Open accounts</span>
-              <div className="stat__value fig">{accounts?.length ?? "—"}</div>
-              <span className="stat__sub muted">
-                <a href={exportTrialBalanceUrl()}>↓ Trial balance CSV</a>
-              </span>
-            </div>
-          </section>
+              <div className="card stat">
+                <span className="eyebrow">Open accounts</span>
+                <div className="stat__value fig">{accounts?.length ?? "—"}</div>
+                <span className="stat__sub muted">
+                  <a href={exportTrialBalanceUrl()}>↓ All-time trial balance CSV</a>
+                </span>
+              </div>
+            </section>
+          </details>
 
           <div className="grid" style={{ gap: 20 }}>
             {ACCOUNT_TYPE_ORDER.map((type) => (
               <TypeGroup key={type} type={type} rows={byType.get(type) ?? []} />
             ))}
-            <NewAccountForm />
           </div>
         </>
       )}

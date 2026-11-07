@@ -1,1 +1,39 @@
-Generic single-database configuration.
+# Database migrations
+
+Run Alembic from `backend/` so the default relative SQLite path and `.env` resolve
+to the intended app instance:
+
+```bash
+uv run alembic current
+uv run alembic upgrade head
+```
+
+`DATABASE_URL` selects SQLite or PostgreSQL. Migrations update the journal schema;
+DuckDB tables are initialized separately by the warehouse layer.
+
+## Revisions
+
+| Revision | Changes |
+|---|---|
+| `0001_initial_double_entry` | Journal entries/lines, accounts, payees, salary profiles, budgets, and fund overrides. |
+| `0002_fortnightly` (head) | Fortnightly salary period: PostgreSQL enum gains `FORTNIGHTLY`; SQLite column widens from 7 to 11 characters. Existing monthly/annual values and breakdown snapshots are preserved. |
+
+The fortnightly downgrade refuses to proceed while any profile uses that period.
+Back up and remove those profiles, or replace them with correctly recalculated
+monthly/annual profiles, before downgrading. Merely selecting a different active
+profile does not change the saved period of a fortnightly profile.
+
+On PostgreSQL, downgrade recreates the earlier enum after checking for fortnightly
+rows. On SQLite, it restores the earlier column length. Test this against a backup
+before downgrading a populated database.
+
+## Validation status
+
+`tests/integration/test_salary_migration.py` exercises SQLite upgrade/downgrade,
+snapshot preservation, and the downgrade guard using a disposable database.
+PostgreSQL upgrade SQL was generated and inspected on 2026-11-07; execution against
+a live PostgreSQL instance has not been verified.
+
+Migrations do not populate demo data or clear financial records. For initialization
+and operational reset details, see [the walkthrough](../../WALKTHROUGH.md) and
+[UI/UX testing](../../docs/UI_UX_TESTING.md).
