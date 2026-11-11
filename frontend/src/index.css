@@ -1,5 +1,5 @@
 /* ============================================================
-   Loaf & Ledger — "Blue Ink" design system
+   Loaf & Ledger — "Blue Ink" design system (Enriched v0.2+)
    Ledgers were kept in blue-black ink on cool paper; that is the
    whole palette. Numbers stay monospaced so columns line up,
    everything else is one soft sans in sentence case.
@@ -26,6 +26,7 @@
      flip with the theme: the accent lightens in the dark, so white text on
      it would wash out. Every accent-filled surface reads this token. */
   --accent: light-dark(#2a5fa8, #7aa9ee);
+  --accent-soft: light-dark(rgba(42, 95, 168, 0.1), rgba(122, 169, 238, 0.14));
   --on-accent: light-dark(#ffffff, #0f1621);
 
   /* A large filled panel needs a *dimmer* blue than a button does: at card
@@ -47,16 +48,53 @@
 
   --radius: 9px;
   --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px light-dark(rgba(22, 35, 58, 0.05), rgba(0, 0, 0, 0.3));
   --shadow:
     0 1px 2px light-dark(rgba(22, 35, 58, 0.06), rgba(0, 0, 0, 0.35)),
     0 8px 24px light-dark(rgba(22, 35, 58, 0.06), rgba(0, 0, 0, 0.28));
-  --maxw: 1160px;
+  --shadow-lg:
+    0 4px 12px light-dark(rgba(22, 35, 58, 0.08), rgba(0, 0, 0, 0.45)),
+    0 20px 48px light-dark(rgba(22, 35, 58, 0.14), rgba(0, 0, 0, 0.55));
+  --maxw: 1200px;
+
+  --card-pad: 20px;
+  --card-head-pad: 16px 20px;
+  --cell-pad: 9px 12px;
+  --grid-gap: 20px;
 }
 
-/* An explicit choice pins color-scheme, which is what makes every
-   light-dark() above stop following the OS and follow the toggle instead. */
+/* Explicit theme pin */
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
+
+/* Accessibility: High Contrast */
+:root[data-contrast="high"] {
+  --rule: light-dark(#9fb2cc, #4a5d7a);
+  --rule-strong: light-dark(#6c82a3, #6d84a6);
+  --ink-soft: light-dark(#1f314d, #d8e3f5);
+  --muted: light-dark(#435675, #a9bbd4);
+}
+
+/* Appearance: Compact Density */
+:root[data-density="compact"] {
+  --card-pad: 14px;
+  --card-head-pad: 11px 14px;
+  --cell-pad: 6px 9px;
+  --grid-gap: 14px;
+}
+
+/* Accessibility: Font Scale */
+:root[data-font-scale="sm"] body { font-size: 13.8px; }
+:root[data-font-scale="md"] body { font-size: 15px; }
+:root[data-font-scale="lg"] body { font-size: 16.5px; }
+
+/* Accessibility: Reduced Motion */
+:root[data-reduce-motion="true"] *,
+:root[data-reduce-motion="true"] *::before,
+:root[data-reduce-motion="true"] *::after {
+  transition: none !important;
+  animation: none !important;
+}
 
 * { box-sizing: border-box; }
 
@@ -89,10 +127,7 @@ button { font-family: inherit; }
 .fig--credit { color: var(--credit); }
 .fig--debit { color: var(--debit); }
 
-/* ---- Small labels ----
-   Sentence case, in the body sans. These sit above nearly every figure and
-   field in the app, so shouting them in tracked-out caps made the whole
-   surface read as louder than the numbers it was labelling. */
+/* ---- Small labels ---- */
 .eyebrow {
   font-family: var(--font-sans);
   font-size: 12.5px;
@@ -103,15 +138,16 @@ button { font-family: inherit; }
 
 /* ---- Card ---- */
 .card {
-  min-width: 0; /* let a card shrink so a wide table scrolls, not the page */
+  min-width: 0;
   background: var(--card-bg);
   border: 1px solid var(--rule);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 .card__head {
-  position: relative; /* containing block for an InfoNote panel in the title */
-  padding: 16px 20px;
+  position: relative;
+  padding: var(--card-head-pad);
   border-bottom: 1px solid var(--rule);
   display: flex;
   flex-wrap: wrap;
@@ -119,7 +155,7 @@ button { font-family: inherit; }
   justify-content: space-between;
   gap: 4px 12px;
 }
-.card__body { padding: 20px; overflow-x: auto; }
+.card__body { padding: var(--card-pad); overflow-x: auto; }
 
 /* ---- Ledger table ---- */
 .ledger {
@@ -134,11 +170,11 @@ button { font-family: inherit; }
   color: var(--muted);
   font-weight: 500;
   letter-spacing: 0;
-  padding: 8px 12px;
+  padding: var(--cell-pad);
   border-bottom: 1px solid var(--rule-strong);
 }
 .ledger td {
-  padding: 9px 12px;
+  padding: var(--cell-pad);
   border-bottom: 1px solid var(--rule);
   vertical-align: middle;
 }
@@ -164,18 +200,48 @@ button { font-family: inherit; }
   background: var(--surface-raised);
   color: var(--ink);
   font-weight: 500;
-  font-size: 14px;
+  font-size: 13.5px;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, transform 0.05s ease;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.05s ease;
 }
-.btn:hover { border-color: var(--accent); }
-.btn:active { transform: translateY(1px); }
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--surface-raised) 92%, var(--accent));
+}
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn--primary {
   background: var(--accent);
   color: var(--on-accent);
   border-color: var(--accent);
 }
-.btn--primary:hover { filter: brightness(1.05); }
+.btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 90%, var(--ink));
+  border-color: var(--accent);
+}
+.btn--active-tab {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn--danger-outline {
+  color: var(--debit);
+  border-color: color-mix(in srgb, var(--debit) 45%, var(--rule));
+}
+.btn--danger-outline:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--debit) 12%, var(--surface-raised));
+  border-color: var(--debit);
+}
+.btn--danger {
+  background: var(--debit);
+  color: #ffffff;
+  border-color: var(--debit);
+}
+.btn--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--debit) 88%, #000000);
+  border-color: var(--debit);
+}
 
 /* ---- Form controls ---- */
 .field { display: flex; flex-direction: column; gap: 5px; }
@@ -188,10 +254,12 @@ input, select {
   border-radius: var(--radius);
   background: var(--surface-raised);
   color: var(--ink);
+  transition: border-color 0.12s ease;
 }
 input.fig { font-family: var(--font-mono); }
 input:focus, select:focus, .btn:focus-visible, a:focus-visible,
-.infonote__btn:focus-visible, .linkish:focus-visible, .disclosure:focus-visible {
+.infonote__btn:focus-visible, .linkish:focus-visible, .disclosure:focus-visible,
+.rail-toggle:focus-visible, .sidebar__brand:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -208,22 +276,20 @@ input:focus, select:focus, .btn:focus-visible, a:focus-visible,
   border-radius: 999px;
   border: 1px solid var(--rule-strong);
   color: var(--ink-soft);
+  background: color-mix(in srgb, var(--surface-raised) 85%, transparent);
 }
 .pill--credit { color: var(--credit); border-color: color-mix(in srgb, var(--credit) 40%, var(--rule)); }
 .pill--debit { color: var(--debit); border-color: color-mix(in srgb, var(--debit) 40%, var(--rule)); }
 .pill--statutory { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--rule)); }
 
-/* ---- Info note ----
-   The narrative behind a heading, one hover away. Every page and most cards
-   used to open with a paragraph explaining themselves; the explanations are
-   worth keeping, but not worth the top third of every screen. */
+/* ---- Info note ---- */
 .infonote { position: static; display: inline-block; }
 .infonote__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   margin-left: 8px;
   vertical-align: 3px;
@@ -249,14 +315,14 @@ input:focus, select:focus, .btn:focus-visible, a:focus-visible,
   position: absolute;
   top: calc(100% + 9px);
   left: 0;
-  z-index: 20;
+  z-index: 25;
   width: max-content;
   max-width: min(46ch, 100%);
   padding: 14px 16px;
   background: var(--surface-raised);
   border: 1px solid var(--rule);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-lg);
   font-family: var(--font-sans);
   font-size: 13.5px;
   font-weight: 400;
@@ -279,7 +345,7 @@ input:focus, select:focus, .btn:focus-visible, a:focus-visible,
 .muted { color: var(--muted); }
 .stack { display: flex; flex-direction: column; }
 .row { display: flex; align-items: center; }
-.grid { display: grid; gap: 20px; }
+.grid { display: grid; gap: var(--grid-gap); }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

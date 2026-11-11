@@ -283,3 +283,49 @@ export interface WarehouseStatus {
   note: string | null;
   warehouse_path: string;
 }
+
+// ---------------------------------------------------------------- system / database
+
+export interface TableInfo {
+  name: string;
+  store: "oltp" | "olap";
+  role: string;
+  row_count: number;
+  description: string;
+}
+
+export interface DatabaseOverview {
+  oltp_engine: string;
+  oltp_path: string;
+  oltp_size_bytes: number | null;
+  olap_path: string;
+  olap_size_bytes: number | null;
+  backups_count: number;
+  latest_backup: string | null;
+  tables: TableInfo[];
+  warehouse_ok: boolean;
+  warehouse_drift: number;
+}
+
+export interface TablePreview {
+  table: string;
+  store: "oltp" | "olap";
+  columns: string[];
+  rows: Record<string, string | number | boolean | null>[];
+  total_rows: number;
+}
+
+export type DataDeletionTarget =
+  | "entries"
+  | "budgets"
+  | "salary_profiles"
+  | "custom_accounts_payees"
+  | "all_financial";
+
+export interface SystemOperation {
+  action: string;
+  backup_file: string | null;
+  counts: Record<string, number>;
+  warehouse_counts: Record<string, number>;
+  detail: string;
+}

@@ -1,9 +1,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { localISODate } from "@/lib/format";
+import type { EntryKind, PayPeriod } from "@/lib/types";
 
 export type TimeRange = "this_month" | "last_3m" | "ytd" | "all";
 export type Theme = "light" | "dark" | "system";
+export type Density = "comfortable" | "compact";
+export type ViewportPreset = "responsive" | "desktop" | "tablet" | "mobile";
+export type FontScale = "sm" | "md" | "lg";
+export type LedgerPageSize = 10 | 20 | 50;
 
 /** Single source of the range presets + their display labels, shared by
  * the section period control and any page/card that needs to describe
@@ -15,6 +20,18 @@ export const TIME_RANGES: { value: TimeRange; label: string }[] = [
   { value: "all", label: "All" },
 ];
 
+export const VIEWPORT_PRESETS: {
+  value: ViewportPreset;
+  label: string;
+  shortLabel: string;
+  dimensions: string;
+}[] = [
+  { value: "responsive", label: "Responsive (Auto)", shortLabel: "Auto", dimensions: "Fluid window" },
+  { value: "desktop", label: "Desktop", shortLabel: "Desktop", dimensions: "1440 × 900" },
+  { value: "tablet", label: "Tablet (Landscape)", shortLabel: "Tablet", dimensions: "1024 × 768" },
+  { value: "mobile", label: "Mobile", shortLabel: "Mobile", dimensions: "390 × 844" },
+];
+
 export function timeRangeLabel(range: TimeRange): string {
   return TIME_RANGES.find((r) => r.value === range)?.label ?? range;
 }
@@ -22,33 +39,151 @@ export function timeRangeLabel(range: TimeRange): string {
 export type PeriodSection = "dashboard" | "accounts" | "analytics";
 export type DateBounds = { start?: string | null; end?: string | null };
 const DEFAULT_PERIODS: Record<PeriodSection, TimeRange> = {
-  dashboard: "this_month", accounts: "this_month", analytics: "this_month",
+  dashboard: "this_month",
+  accounts: "this_month",
+  analytics: "this_month",
 };
 
 export interface FilterState {
+  // Section period filters
   periods: Record<PeriodSection, TimeRange>;
+
+  // Appearance
   theme: Theme;
+  density: Density;
+  sidebarCollapsed: boolean;
+  viewportPreset: ViewportPreset;
+  showWelcomeOnLaunch: boolean;
+
+  // Default values
+  defaultPeriod: TimeRange;
+  defaultPayPeriod: PayPeriod;
+  defaultEntryKind: EntryKind;
+  ledgerPageSize: LedgerPageSize;
+
+  // Accessibility
+  fontScale: FontScale;
+  reducedMotion: boolean;
+  highContrast: boolean;
+
+  // Ephemeral session UI state (not persisted across full reloads so Welcome shows on launch)
+  welcomeOpen: boolean;
+  welcomeTab: "overview" | "changelogs" | "about";
+  settingsDrawerOpen: boolean;
+
+  // Actions
   setPeriod: (section: PeriodSection, range: TimeRange) => void;
   setTheme: (theme: Theme) => void;
+  setDensity: (density: Density) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  toggleSidebar: () => void;
+  setViewportPreset: (preset: ViewportPreset) => void;
+  setShowWelcomeOnLaunch: (show: boolean) => void;
+  setDefaultPeriod: (range: TimeRange) => void;
+  applyDefaultPeriodToAll: (range?: TimeRange) => void;
+  setDefaultPayPeriod: (period: PayPeriod) => void;
+  setDefaultEntryKind: (kind: EntryKind) => void;
+  setLedgerPageSize: (size: LedgerPageSize) => void;
+  setFontScale: (scale: FontScale) => void;
+  setReducedMotion: (reduced: boolean) => void;
+  setHighContrast: (high: boolean) => void;
+  setWelcomeOpen: (open: boolean, tab?: "overview" | "changelogs" | "about") => void;
+  setSettingsDrawerOpen: (open: boolean) => void;
+  resetPreferences: () => void;
 }
+
+const INITIAL_PREFS = {
+  periods: { ...DEFAULT_PERIODS },
+  theme: "system" as Theme,
+  density: "comfortable" as Density,
+  sidebarCollapsed: false,
+  viewportPreset: "responsive" as ViewportPreset,
+  showWelcomeOnLaunch: true,
+  defaultPeriod: "this_month" as TimeRange,
+  defaultPayPeriod: "monthly" as PayPeriod,
+  defaultEntryKind: "expense" as EntryKind,
+  ledgerPageSize: 10 as LedgerPageSize,
+  fontScale: "md" as FontScale,
+  reducedMotion: false,
+  highContrast: false,
+};
 
 export const useFilters = create<FilterState>()(
   persist(
-    (set) => ({
-      periods: { ...DEFAULT_PERIODS },
-      theme: "system",
-      setPeriod: (section, range) => set((state) => ({
-        periods: { ...state.periods, [section]: range },
-      })),
+    (set, get) => ({
+      ...INITIAL_PREFS,
+      welcomeOpen: true,
+      welcomeTab: "overview",
+      settingsDrawerOpen: false,
+
+      setPeriod: (section, range) =>
+        set((state) => ({
+          periods: { ...state.periods, [section]: range },
+        })),
       setTheme: (theme) => set({ theme }),
+      setDensity: (density) => set({ density }),
+      setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setViewportPreset: (viewportPreset) => set({ viewportPreset }),
+      setShowWelcomeOnLaunch: (showWelcomeOnLaunch) => set({ showWelcomeOnLaunch }),
+      setDefaultPeriod: (defaultPeriod) => set({ defaultPeriod }),
+      applyDefaultPeriodToAll: (range) => {
+        const target = range ?? get().defaultPeriod;
+        set({
+          defaultPeriod: target,
+          periods: { dashboard: target, accounts: target, analytics: target },
+        });
+      },
+      setDefaultPayPeriod: (defaultPayPeriod) => set({ defaultPayPeriod }),
+      setDefaultEntryKind: (defaultEntryKind) => set({ defaultEntryKind }),
+      setLedgerPageSize: (ledgerPageSize) => set({ ledgerPageSize }),
+      setFontScale: (fontScale) => set({ fontScale }),
+      setReducedMotion: (reducedMotion) => set({ reducedMotion }),
+      setHighContrast: (highContrast) => set({ highContrast }),
+      setWelcomeOpen: (welcomeOpen, tab) =>
+        set((s) => ({
+          welcomeOpen,
+          welcomeTab: tab ?? s.welcomeTab,
+        })),
+      setSettingsDrawerOpen: (settingsDrawerOpen) => set({ settingsDrawerOpen }),
+      resetPreferences: () =>
+        set({
+          ...INITIAL_PREFS,
+        }),
     }),
     {
       name: "loaf-ledger-filters",
-      version: 3,
-      partialize: (state) => ({ theme: state.theme, periods: state.periods }),
+      version: 4,
+      partialize: (state) => ({
+        theme: state.theme,
+        periods: state.periods,
+        density: state.density,
+        sidebarCollapsed: state.sidebarCollapsed,
+        viewportPreset: state.viewportPreset,
+        showWelcomeOnLaunch: state.showWelcomeOnLaunch,
+        defaultPeriod: state.defaultPeriod,
+        defaultPayPeriod: state.defaultPayPeriod,
+        defaultEntryKind: state.defaultEntryKind,
+        ledgerPageSize: state.ledgerPageSize,
+        fontScale: state.fontScale,
+        reducedMotion: state.reducedMotion,
+        highContrast: state.highContrast,
+      }),
       migrate: (persisted) => {
-        const old = persisted as { theme?: Theme } | undefined;
-        return { theme: old?.theme ?? "system", periods: { ...DEFAULT_PERIODS } };
+        const old = persisted as Partial<FilterState> | undefined;
+        const showOnLaunch = old?.showWelcomeOnLaunch ?? true;
+        return {
+          ...INITIAL_PREFS,
+          ...old,
+          theme: old?.theme ?? "system",
+          periods: old?.periods ?? { ...DEFAULT_PERIODS },
+          welcomeOpen: showOnLaunch,
+        };
+      },
+      onRehydrateStorage: () => (state) => {
+        if (state && !state.showWelcomeOnLaunch) {
+          state.setWelcomeOpen(false);
+        }
       },
     },
   ),

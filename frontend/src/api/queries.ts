@@ -11,6 +11,8 @@ import type {
   BudgetScope,
   BudgetStatus,
   DashboardSummary,
+  DatabaseOverview,
+  DataDeletionTarget,
   EarningsResponse,
   EntryKind,
   FundStatus,
@@ -24,6 +26,9 @@ import type {
   PayPeriod,
   RunningBalanceResponse,
   SalaryProfile,
+  SystemOperation,
+  TablePreview,
+  User,
   WarehouseStatus,
 } from "@/lib/types";
 
@@ -40,9 +45,21 @@ function dateParams(bounds: DateBounds = {}) {
   return { start: bounds.start || undefined, end: bounds.end || undefined };
 }
 
-// ---- meta ----
+// ---- meta & user ----
 export const useMeta = () =>
   useQuery({ queryKey: ["meta"], queryFn: () => api.get<Meta>("/meta"), staleTime: Infinity });
+
+export const useUser = () =>
+  useQuery({ queryKey: ["user"], queryFn: () => api.get<User>("/user") });
+
+export const useUpdateUser = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: { name?: string; email?: string | null }) =>
+      api.patch<User>("/user", patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["user"] }),
+  });
+};
 
 // ---- accounts ----
 export const useAccounts = (opts?: { includeArchived?: boolean; type?: AccountType }) =>
@@ -120,10 +137,12 @@ function useLedgerMutation<TInput, TResult>(fn: (input: TInput) => Promise<TResu
   });
 }
 
-export const useEntryPage = (page: number) => useQuery({
-  queryKey: ["entries", "page", page],
-  queryFn: () => api.get<JournalEntryPage>("/ledger/entries/page", { page, page_size: 10 }),
-});
+export const useEntryPage = (page: number, pageSize = 10) =>
+  useQuery({
+    queryKey: ["entries", "page", page, pageSize],
+    queryFn: () =>
+      api.get<JournalEntryPage>("/ledger/entries/page", { page, page_size: pageSize }),
+  });
 
 export interface SimpleEntryInput {
   kind: EntryKind;
@@ -371,6 +390,66 @@ export const useRebuildWarehouse = () => {
       qc.invalidateQueries({ queryKey: ["warehouse"] });
       qc.invalidateQueries({ queryKey: ["analytics"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["system"] });
+    },
+  });
+};
+
+// ---- system / database navigation / reset / data deletion ----
+
+const ALL_DATA_KEYS = [
+  ["entries"],
+  ["accounts"],
+  ["payees"],
+  ["salary"],
+  ["dashboard"],
+  ["analytics"],
+  ["budgets"],
+  ["warehouse"],
+  ["system"],
+];
+
+export const useDatabaseOverview = () =>
+  useQuery({
+    queryKey: ["system", "database"],
+    queryFn: () => api.get<DatabaseOverview>("/system/database"),
+  });
+
+export const useTablePreview = (tableName: string | null, limit = 20) =>
+  useQuery({
+    queryKey: ["system", "preview", tableName, limit],
+    queryFn: () =>
+      api.get<TablePreview>(`/system/database/preview/${tableName}`, { limit }),
+    enabled: !!tableName,
+  });
+
+export const useResetBaseline = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<SystemOperation>("/system/reset-baseline"),
+    onSuccess: () => {
+      ALL_DATA_KEYS.forEach((queryKey) => qc.invalidateQueries({ queryKey }));
+    },
+  });
+};
+
+export const useSeedDemo = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<SystemOperation>("/system/seed-demo"),
+    onSuccess: () => {
+      ALL_DATA_KEYS.forEach((queryKey) => qc.invalidateQueries({ queryKey }));
+    },
+  });
+};
+
+export const useDeleteData = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (target: DataDeletionTarget) =>
+      api.post<SystemOperation>("/system/delete-data", { target }),
+    onSuccess: () => {
+      ALL_DATA_KEYS.forEach((queryKey) => qc.invalidateQueries({ queryKey }));
     },
   });
 };

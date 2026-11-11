@@ -410,3 +410,50 @@ class WarehouseStatusOut(BaseModel):
 
 class WarehouseRebuildOut(BaseModel):
     counts: dict[str, int]
+
+
+# ---------------------------------------------------------------- system / settings
+
+
+class TableInfoOut(BaseModel):
+    name: str
+    store: str  # "oltp" | "olap"
+    role: str
+    row_count: int
+    description: str
+
+
+class DatabaseOverviewOut(BaseModel):
+    oltp_engine: str
+    oltp_path: str
+    oltp_size_bytes: int | None
+    olap_path: str
+    olap_size_bytes: int | None
+    backups_count: int
+    latest_backup: str | None
+    tables: list[TableInfoOut]
+    warehouse_ok: bool
+    warehouse_drift: int
+
+
+class TablePreviewOut(BaseModel):
+    table: str
+    store: str
+    columns: list[str]
+    rows: list[dict]
+    total_rows: int
+
+
+class DataDeletionRequest(BaseModel):
+    target: str = Field(
+        pattern="^(entries|budgets|salary_profiles|custom_accounts_payees|all_financial)$"
+    )
+
+
+class SystemOperationOut(BaseModel):
+    action: str
+    backup_file: str | None = None
+    counts: dict[str, int]
+    warehouse_counts: dict[str, int]
+    detail: str
+

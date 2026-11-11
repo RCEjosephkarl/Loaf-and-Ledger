@@ -14,6 +14,7 @@ import { Money } from "@/components/Money";
 import { localISODateTime, money, percent, PAY_PERIOD_LABEL, PER_PERIOD_LABEL } from "@/lib/format";
 import type { Breakdown, PayPeriod } from "@/lib/types";
 import { InfoNote } from "@/components/InfoNote";
+import { useFilters } from "@/store/filters";
 
 const KIND_LABEL: Record<string, string> = {
   gross: "Gross",
@@ -134,8 +135,9 @@ export function Salary() {
   const activate = useActivateProfile();
   const [posting, setPosting] = useState(false);
 
+  const defaultPayPeriod = useFilters((s) => s.defaultPayPeriod);
   const [gross, setGross] = useState("");
-  const [payPeriod, setPayPeriod] = useState<PayPeriod>("monthly");
+  const [payPeriod, setPayPeriod] = useState<PayPeriod>(defaultPayPeriod);
   const [label, setLabel] = useState("Day job");
   const [loadedId, setLoadedId] = useState<number | null>(null);
 
