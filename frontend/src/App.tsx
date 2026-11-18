@@ -6,6 +6,7 @@ import { Accounts } from "@/pages/Accounts";
 import { Ledger } from "@/pages/Ledger";
 import { Budgets } from "@/pages/Budgets";
 import { Analytics } from "@/pages/Analytics";
+import { Settings } from "@/pages/Settings";
 import "@/pages/pages.css";
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="ledger" element={<Ledger />} />
         <Route path="budgets" element={<Budgets />} />
         <Route path="analytics" element={<Analytics />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
   );

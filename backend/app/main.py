@@ -20,6 +20,7 @@ from app.routers import (
     meta,
     payees,
     salary,
+    system,
     warehouse,
 )
 
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
         export,
         dashboard,
         warehouse,
+        system,
     ):
         app.include_router(module.router, prefix=prefix)
 

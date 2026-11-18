@@ -13,6 +13,7 @@ import { exportLedgerUrl } from "@/lib/api";
 import { entryDate, formatTime, localISODateTime, money } from "@/lib/format";
 import type { Account, EntryKind, JournalEntry, JournalLineInput } from "@/lib/types";
 import { InfoNote } from "@/components/InfoNote";
+import { useFilters } from "@/store/filters";
 
 const now = () => localISODateTime(new Date());
 
@@ -46,8 +47,9 @@ const KINDS: Record<EntryKind, { label: string; moneyLabel: string; counterLabel
 function QuickEntry({ accounts, onPosted }: { accounts: Account[]; onPosted: () => void }) {
   const create = useCreateSimpleEntry();
   const { data: payees } = usePayees();
+  const defaultEntryKind = useFilters((s) => s.defaultEntryKind);
 
-  const [kind, setKind] = useState<EntryKind>("expense");
+  const [kind, setKind] = useState<EntryKind>(defaultEntryKind);
   const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState<number | "">("");
   const [counterId, setCounterId] = useState<number | "">("");
@@ -464,11 +466,12 @@ function EntryRow({
 
 export function Ledger() {
   const [page, setPage] = useState(1);
+  const pageSize = useFilters((s) => s.ledgerPageSize);
   const { data: accounts } = useAccounts({ includeArchived: true });
-  const { data, isLoading, isFetching, isError, error, refetch } = useEntryPage(page);
+  const { data, isLoading, isFetching, isError, error, refetch } = useEntryPage(page, pageSize);
   const entries = data?.items;
   const { data: balances } = useAccountBalances({}, true);
-  const lastPage = Math.max(1, Math.ceil((data?.total ?? 0) / 10));
+  const lastPage = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize));
   useEffect(() => {
     if (data && page > lastPage) setPage(lastPage);
   }, [data, lastPage, page]);
@@ -570,7 +573,7 @@ export function Ledger() {
                 onClick={() => setPage((p) => p - 1)}>Previous</button>
               <span className="eyebrow" aria-live="polite">
                 {data
-                  ? data.total ? `${(page - 1) * 10 + 1}–${Math.min(page * 10, data.total)} of ${data.total}` : "0 entries"
+                  ? data.total ? `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, data.total)} of ${data.total}` : "0 entries"
                   : isError ? `Page ${page} could not load` : "Loading entries…"}
               </span>
               <button className="btn" disabled={!data || page >= lastPage || isFetching}

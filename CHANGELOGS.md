@@ -8,6 +8,29 @@ All notable changes to Loaf & Ledger are recorded here. The format follows
 
 ### Added
 
+- **Modern collapsible navigation rail & top bar:** Replaced the static text sidebar with a
+  categorized icon-and-label navigation rail (`Overview`, `Bookkeeping`, `Planning`, `System`)
+  that collapses to a compact icon rail on desktop/tablet and adapts into a bottom navigation
+  bar on mobile. The sticky glassmorphic top header displays breadcrumbs, viewport presets,
+  Welcome/Changelog triggers, theme switching, and a quick-access Settings drawer.
+- **Welcome / Landing Hub:** Added an interactive Welcome overlay on launch (with a startup
+  preference toggle and navigation shortcuts to reopen anytime) featuring **Open App**,
+  **See Changelogs** (filterable release timeline), and **About the App** (four foundational
+  pillars and OLTP-to-OLAP write-through architecture diagram).
+- **Global Settings (`/settings` & Quick Drawer) and `/api/v1/system` router:** Added six
+  settings modules — **Appearance** (theme, UI density, rail mode, viewport preset, startup
+  welcome toggle), **Default values** (user profile name/email, default period scope, default
+  salary pay period, default ledger entry kind, and ledger page size `10`/`20`/`50`),
+  **Accessibility** (font scale, high contrast, reduced motion), **Database navigation**
+  (live SQLite OLTP & DuckDB OLAP table row counts, file sizes, interactive table row preview,
+  in-process warehouse rebuild, demo data seeding, and CSV exports), **Reset** (UI preference
+  reset and verified 36-account zero-balance clean baseline reset with automatic SQLite backup),
+  and **Data deletion** (granular deletion of entries, budgets, salary profiles, custom
+  accounts/payees, or full financial wipe).
+- **Window size flexibility & Viewport Presets:** Added CSS `@container` queries and an
+  interactive Viewport Preset Switcher (**Responsive / Auto**, **Desktop** `1440×900`,
+  **Tablet Landscape** `1024×768`, **Mobile** `390×844`) so page grids and navigation adapt
+  both to physical browser window resizing and to selected device presets.
 - **Section periods:** Dashboard, Accounts, and Analytics each persist an independent
   This month / Last 3 months / YTD / All selection. Budgets displays the current month.
 - **Fortnightly salaries:** Every two weeks means 26 pay periods per year. Calculator
