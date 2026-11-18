@@ -94,9 +94,16 @@ need to be running. Works on desktop and Android browsers.
 
 ---
 
-## Theme and section periods
+## Navigation, theme, and section periods
 
-The top bar controls **Theme** — light → dark → follow-system.
+The collapsible navigation rail organizes pages into **Overview** (Dashboard, Analytics),
+**Bookkeeping** (Ledger, Accounts), **Planning** (Salary, Budgets), and **System**
+(Settings), collapsing to an icon rail on desktop/tablet and a bottom bar on mobile.
+
+The sticky top bar displays breadcrumbs, **Viewport Presets** (**Responsive / Auto**,
+**Desktop** `1440×900`, **Tablet Landscape** `1024×768`, **Mobile** `390×844`),
+**Welcome** / **Changelogs** triggers, **Theme** (light → dark → follow-system), and a
+quick-access **Settings** drawer.
 
 **Dashboard**, **Accounts**, and **Analytics** each have their own period control:
 This month · Last 3 months · YTD · All. Each selection persists independently between
@@ -228,6 +235,24 @@ The flagship. Four acts, in the order the questions matter, with a sticky nav on
 If analytics ever fall behind the ledger, a banner appears at the top with a **Rebuild
 warehouse** button. In normal use you will never see it: every entry you post is loaded
 into the warehouse before the request returns.
+
+### 07 Settings & Welcome Hub — "Preferences, inspection, and reset"
+Open the **Welcome Hub** on launch (or anytime from the top bar) to jump into the app,
+browse the filterable **Changelogs**, or review the **About the App** architecture pillars.
+
+Use **Settings** (`/settings`) or the top-bar quick drawer to configure six modules:
+- **Appearance:** Theme, UI density, navigation rail mode, viewport preset, and startup
+  Welcome Hub toggle.
+- **Default values:** User profile name/email, default period scope, default salary pay
+  period, default ledger entry kind, and ledger page size (`10`, `20`, or `50`).
+- **Accessibility:** Font scale, high contrast, and reduced motion.
+- **Database navigation:** Live SQLite OLTP and DuckDB OLAP table row counts, file sizes,
+  interactive table row previews, in-process warehouse rebuild, demo data seeding, and CSV
+  exports.
+- **Reset:** Reset UI preferences or restore the verified 36-account zero-balance clean
+  baseline (with automatic SQLite backup).
+- **Data deletion:** Granularly delete journal entries, budgets, salary profiles, custom
+  accounts/payees, or perform a full financial wipe.
 
 ## Tips
 

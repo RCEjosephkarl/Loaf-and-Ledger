@@ -4,9 +4,9 @@
 double-entry ledger, mirrors it into a star-schema warehouse, and tells the story back
 in plain language.*
 
-**Release:** `v0.2.0` (2026-09-09) · **Target:** Local, self-hosted, single-user, PHP (`₱`) only
+**Release:** `v0.3.0` (2026-11-18) · **Target:** Local, self-hosted, single-user, PHP (`₱`) only
 
-Current development is recorded under [Unreleased](CHANGELOGS.md#unreleased).
+Release notes and history are recorded in [`CHANGELOGS.md`](CHANGELOGS.md).
 For the clean test baseline and backup/recovery instructions, see
 [UI/UX testing](docs/UI_UX_TESTING.md).
 
@@ -33,7 +33,7 @@ credited to income, withholdings debited to statutory accounts, and the remainde
 uniting payroll planning and bookkeeping into a single coherent system.
 
 This document details the problem, the design decisions, the two-database architecture,
-the feature set across all six application sections, and how to run and verify the system.
+the feature set across the application's financial and system sections, and how to run and verify the system.
 
 ---
 
@@ -93,7 +93,7 @@ Two stores, two jobs. The write-through ETL arrow between them forms the backbon
 
 ```
         ┌───────────────────── frontend/ (Vite + React + TS) ─────────────────────┐
-        │  Zustand { periods by section, theme } ─ explicit query dates          │
+        │  Zustand { periods by section, theme, UI preferences }                 │
         │  TanStack Query hooks ───────────────▶  /api/v1/*                        │
         └────────────────────────────────────┬────────────────────────────────────┘
                                              │ (Vite dev proxy)
@@ -102,7 +102,7 @@ Two stores, two jobs. The write-through ETL arrow between them forms the backbon
         │   WRITE PATH                              READ PATH                      │
         │   ──────────                              ─────────                      │
         │   routers/{accounts,payees,ledger,        routers/{analytics,dashboard,   │
-        │            salary,budgets}                         budgets}              │
+        │            salary,budgets,system}                  budgets,system}       │
         │        │                                       │                         │
         │        ▼                                       ▼                         │
         │   services/journal.py  ← the balance      warehouse/queries.py           │
@@ -176,6 +176,7 @@ The DuckDB OLAP warehouse models financial history across four dimensions, two f
 | **F5 Export** | `GET /export/ledger.csv`<br>`GET /export/trial-balance.csv` | Streamed CSVs: granular journal lines (`ledger.csv`) and verified debit/credit balance proofs (`trial-balance.csv`). |
 | **F6 Dashboard** | `GET /dashboard/summary` | Balance sheet highlight summary, top expense accounts, and deterministic insights. |
 | **Warehouse** | `GET /warehouse/status`<br>`POST /warehouse/rebuild` | OLTP-to-OLAP drift checking, integrity verification, and in-process warehouse truncation and reload. |
+| **System** | `GET /system/database`<br>`GET /system/database/preview/{table_name}`<br>`POST /system/reset-baseline`<br>`POST /system/seed-demo`<br>`POST /system/delete-data` | Live SQLite/DuckDB table counts, row previews, 36-account baseline reset, demo seeding, and granular data deletion. |
 | **Meta & User** | `GET /meta`<br>`GET /user`<br>`PATCH /user` | Instance configuration, modelled jurisdiction metadata, and user preferences. |
 
 ---
@@ -243,9 +244,11 @@ preventing double-posting even if clicked repeatedly or retried over the network
 
 ## 5. Results: what the app does
 
-Loaf & Ledger delivers six modules styled with the **Blue Ink** design system:
-blue structural accents, cool paper/card surfaces, alternating table rows,
-and monospaced financial figures.
+Loaf & Ledger delivers six financial modules plus a **Welcome Hub**, collapsible navigation
+rail, glassmorphic top header, **Viewport Presets** (`Responsive`, `Desktop 1440×900`,
+`Tablet Landscape 1024×768`, `Mobile 390×844`), and **Settings** (`/settings` and quick
+slide-over drawer), all styled with the **Blue Ink** design system: blue structural accents,
+cool paper/card surfaces, alternating table rows, and monospaced financial figures.
 
 Contextual **`InfoNote` popovers** replace bulky explanatory paragraphs throughout the UI, keeping
 screens clean and figures above the fold while remaining accessible via hover, click/pin, and keyboard navigation.
@@ -322,6 +325,19 @@ smooth scrolling, and prose-led ledes featuring live data figures:
 - **Real-Time Warehouse Monitor:** An alert banner appears if OLAP fact drift is detected, offering
   a one-click in-process **Rebuild warehouse** button.
 
+### 07 · Settings & Welcome Hub — "Preferences, inspection, and reset"
+- **Welcome Hub:** Interactive launch overlay (reopenable anytime from the top bar) with
+  **Open App**, **See Changelogs** (filterable release timeline), and **About the App**
+  (foundational pillars and OLTP-to-OLAP write-through architecture diagram).
+- **Global Settings (`/settings` & Quick Drawer):** Six configuration modules covering
+  **Appearance** (theme, UI density, rail mode, viewport preset, startup welcome toggle),
+  **Default values** (user profile, default period scope, pay period, entry kind, and ledger
+  page size `10`/`20`/`50`), **Accessibility** (font scale, high contrast, reduced motion),
+  **Database navigation** (live SQLite/DuckDB row counts, file sizes, table row preview,
+  in-process warehouse rebuild, demo seeding, and CSV exports), **Reset** (UI preference
+  reset and verified 36-account zero-balance baseline reset), and **Data deletion**
+  (granular or full financial wipe).
+
 ### Design System & Color Accessibility
 - **Blue Ink:** Blue accents on cool paper surfaces, with light, dark, and system themes.
   Money tables use monospaced tabular numerals and alternating rows. The balance chart
@@ -358,10 +374,12 @@ and user flows:
     across more than 2,000 entries, including archived accounts and voided postings.
   - `test_salary_migration.py`: SQLite upgrade/downgrade, snapshot preservation, and the
     downgrade guard for existing fortnightly profiles.
+  - `test_system.py`: Live `/api/v1/system` OLTP/OLAP database overview, table row previews,
+    36-account baseline reset, demo seeding, and granular data deletion.
 - **End-to-End & Static Analysis:** Headless SPA verification across light and dark themes, strict TypeScript compilation, and zero lint warnings.
 
 ```bash
-# Run the test suite (121 passed in the 2026-11-07 validation)
+# Run the test suite (124 passed in the 2026-11-18 validation)
 (cd backend && uv run pytest)        # or use .venv/bin/pytest inside backend/
 
 # Lint backend code
@@ -405,20 +423,20 @@ Loaf-and-Ledger/
 │   │   ├── models/        accounts · payees · journal_entries · journal_lines · budgets · salary
 │   │   ├── services/      journal (the balance invariant) · payslip · balances · insights
 │   │   ├── warehouse/     engine · ddl · etl · queries · status · rebuild   (DuckDB OLAP)
-│   │   ├── routers/       accounts · payees · ledger · salary · budgets · analytics · dashboard · export · warehouse · meta
+│   │   ├── routers/       accounts · payees · ledger · salary · budgets · analytics · dashboard · export · warehouse · system · meta
 │   │   ├── tax/           TaxRule registry + regions/ph.py
 │   │   ├── config.py · db.py · deps.py · main.py · schemas.py · seed.py
 │   ├── migrations/        Alembic migrations
 │   └── tests/
 │       ├── unit/          test_journal · test_balances · test_payslip · test_tax_engine · test_budget_periods
-│       └── integration/   API · warehouse · transfers · seed CLI · section behaviors · salary migration
+│       └── integration/   API · warehouse · transfers · seed CLI · section behaviors · salary migration · system
 ├── frontend/
 │   ├── src/
 │   │   ├── api/           client endpoints
-│   │   ├── components/    Brand · FilterBar · PeriodFilter · HighlightCard · InfoNote · Layout · Money · Charts
-│   │   ├── pages/         Dashboard · Salary · Accounts · Ledger · Budgets · Analytics
-│   │   ├── store/         Zustand section-period and theme preferences
-│   │   └── lib/           CVD-validated chart colors & utilities
+│   │   ├── components/    Brand · FilterBar · PeriodFilter · HighlightCard · Icons · InfoNote · Layout · Money · SettingsDrawer · WelcomeHub · Charts
+│   │   ├── pages/         Dashboard · Salary · Accounts · Ledger · Budgets · Analytics · Settings
+│   │   ├── store/         Zustand section-period and UI preference store
+│   │   └── lib/           CVD-validated chart colors · changelogData · utilities
 │   ├── package.json · tsconfig.json · vite.config.ts
 ├── docs/UI_UX_TESTING.md  clean baseline · smoke tests · backup/recovery
 ├── README.md · WALKTHROUGH.md · CHANGELOGS.md

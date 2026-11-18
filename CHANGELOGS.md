@@ -4,7 +4,12 @@ All notable changes to Loaf & Ledger are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to adhere to
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] — 2026-11-18
+
+A UI/UX, configurability, and correctness release: adds a collapsible navigation rail,
+Welcome Hub, Global Settings suite with live OLTP/OLAP database inspection, responsive
+viewport presets, independent section periods, fortnightly payroll, and paginated ledger
+history.
 
 ### Added
 
@@ -46,9 +51,9 @@ All notable changes to Loaf & Ledger are recorded here. The format follows
   column length. Downgrade is refused while fortnightly profiles remain.
 - Regression coverage for section date bounds, empty calendar periods, histories longer
   than 36 months, periodic rounding, activation/warehouse synchronization, pagination
-  beyond 2,000 entries, and migration upgrade/downgrade behavior. Latest full validation:
-  **121 passing backend tests**, backend lint, frontend type checking and build, and
-  desktop/mobile browser checks on 2026-11-07.
+  beyond 2,000 entries, system database/reset endpoints, and migration upgrade/downgrade
+  behavior. Latest full validation: **124 passing backend tests**, backend lint, frontend
+  type checking and build, and desktop/mobile browser checks.
 
 ### Changed
 
@@ -264,5 +269,7 @@ as the inaugural cut.
   tax-filing advice.
 - Deployment target is a local, single-user, self-hosted instance (no multi-user auth).
 
+[0.3.0]: https://github.com/RCEjosephkarl/Loaf-and-Ledger/releases/tag/v0.3.0
+[0.2.0]: https://github.com/RCEjosephkarl/Loaf-and-Ledger/releases/tag/v0.2.0
 [0.1.0]: https://github.com/RCEjosephkarl/Loaf-and-Ledger/releases/tag/v0.1.0
 [0.0.0]: https://github.com/RCEjosephkarl/Loaf-and-Ledger/releases/tag/v0.0.0
